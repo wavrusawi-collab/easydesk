@@ -16,4 +16,3 @@ python main.py
 
 **NOTICE: If you have a pre-built version, just double click the file or go into the app launcher.**
 
-[Table of Contents](index.md)

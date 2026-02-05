@@ -4,3 +4,11 @@ description: The desktop for kids
 remote_theme: just-the-docs/just-the-docs
 
 source: .
+
+# The URL to your GitHub repository
+gh_edit_repository: "https://github.com/wavrusawi-collab/easydesk"
+
+# This enables the "View on GitHub" button in the header
+aux_links:
+  "View on GitHub":
+    - "https://github.com/wavrusawi-collab/easydesk"

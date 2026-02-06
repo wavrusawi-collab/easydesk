@@ -129,12 +129,12 @@ class MainWindow(QMainWindow):
                 
                 .app-shell {
                     position: fixed; inset: 10%;
-                    background: rgba(15, 23, 42, 0.85);
+                    background: rgba(15, 23, 42, 0.9);
                     backdrop-filter: blur(50px) saturate(160%);
                     border: 1px solid rgba(255, 255, 255, 0.15);
                     border-radius: 4rem;
                     display: flex; flex-direction: column;
-                    box-shadow: 0 50px 100px rgba(0,0,0,0.6);
+                    box-shadow: 0 50px 100px rgba(0,0,0,0.8);
                     z-index: 1000; transform: scale(0.8); opacity: 0; pointer-events: none;
                     transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
                 }
@@ -159,18 +159,13 @@ class MainWindow(QMainWindow):
                     position: absolute; width: 7rem; height: 7rem; border-radius: 50%;
                     background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
                     display: flex; flex-direction: column; align-items: center; justify-content: center;
-                    cursor: pointer; transition: all 0.4s;
-                    animation: float 15s infinite alternate ease-in-out;
+                    cursor: pointer; transition: background 0.4s, border-color 0.4s, scale 0.4s;
                     z-index: 10; pointer-events: auto;
+                    will-change: transform;
                 }
                 .node:hover { background: rgba(255, 255, 255, 0.15); border-color: var(--accent); scale: 1.1; z-index: 20; }
                 .node span { font-size: 0.75rem; margin-top: 0.5rem; max-width: 85%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; pointer-events: none; }
                 .node i { pointer-events: none; }
-
-                @keyframes float { 
-                    0% { transform: translate(0, 0); } 
-                    100% { transform: translate(40px, 40px); } 
-                }
 
                 input, textarea { background: transparent; border: none; outline: none; color: white; }
                 .btn-primary { background: var(--accent); color: white; padding: 0.8rem 1.8rem; border-radius: 1.8rem; font-weight: 600; transition: transform 0.2s; }
@@ -203,7 +198,7 @@ class MainWindow(QMainWindow):
                     <div class="orb bg-blue-500/20 text-blue-300" onclick="openApp('diary')"><i data-lucide="edit-3"></i></div>
                     <div class="orb bg-yellow-500/20 text-yellow-300" onclick="openApp('tasks')"><i data-lucide="check-circle"></i></div>
                     <div class="orb bg-orange-500/20 text-orange-300" onclick="openApp('sketch')"><i data-lucide="palette"></i></div>
-                    <div class="orb bg-white/5 text-white/30" onclick="location.reload()"><i data-lucide="power"></i></div>
+                    <div class="orb bg-red-500/20 text-red-300" onclick="signOut()"><i data-lucide="power"></i></div>
                 </div>
             </div>
 
@@ -247,12 +242,17 @@ class MainWindow(QMainWindow):
                 let activeApp = null;
                 const canvas = document.getElementById('sk-canvas');
                 let ctx, drawing = false;
+                
+                // Drift physics state
+                let nodes = [];
+                let animationFrameId = null;
 
                 new QWebChannel(qt.webChannelTransport, function(channel) {
                     pybridge = channel.objects.pybridge;
                     pybridge.loginSuccess.connect((u) => {
                         document.getElementById('screen-login').classList.add('hide');
                         document.getElementById('screen-home').classList.remove('hide');
+                        startDrift();
                     });
                     pybridge.loadFiles.connect((json) => {
                         renderConstellation(JSON.parse(json));
@@ -261,24 +261,67 @@ class MainWindow(QMainWindow):
 
                 function login() { pybridge.handleLogin(document.getElementById('u').value, document.getElementById('p').value); }
 
+                function signOut() {
+                    // Logic to clear session and return to login
+                    document.getElementById('screen-login').classList.remove('hide');
+                    document.getElementById('screen-home').classList.add('hide');
+                    document.getElementById('constellation').innerHTML = '';
+                    nodes = [];
+                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                    // Clear inputs
+                    document.getElementById('u').value = '';
+                    document.getElementById('p').value = '';
+                }
+
                 function renderConstellation(files) {
                     const container = document.getElementById('constellation');
                     container.innerHTML = '';
+                    nodes = [];
+                    
                     files.forEach((f, i) => {
-                        const node = document.createElement('div');
-                        node.className = 'node';
-                        const x = 5 + Math.random() * 85;
-                        const y = 5 + Math.random() * 75;
-                        node.style.left = x + '%';
-                        node.style.top = y + '%';
-                        node.style.animationDelay = (i * -1.5) + 's';
+                        const el = document.createElement('div');
+                        el.className = 'node';
+                        
+                        // Initial random position and velocity
+                        const nodeData = {
+                            el: el,
+                            x: Math.random() * (window.innerWidth - 120),
+                            y: Math.random() * (window.innerHeight - 120),
+                            vx: (Math.random() - 0.5) * 0.5, // Slow drift
+                            vy: (Math.random() - 0.5) * 0.5,
+                            width: 112, // 7rem
+                            height: 112
+                        };
                         
                         const icons = { diary: 'file-text', tasks: 'check-circle', sketch: 'image', flashcards: 'zap', secret: 'lock' };
-                        node.innerHTML = `<i data-lucide="${icons[f.type] || 'circle'}"></i><span>${f.name}</span>`;
-                        node.onclick = (e) => { e.stopPropagation(); loadFile(f); };
-                        container.appendChild(node);
+                        el.innerHTML = `<i data-lucide="${icons[f.type] || 'circle'}"></i><span>${f.name}</span>`;
+                        el.onclick = (e) => { e.stopPropagation(); loadFile(f); };
+                        
+                        container.appendChild(el);
+                        nodes.push(nodeData);
                     });
                     lucide.createIcons();
+                }
+
+                function startDrift() {
+                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                    
+                    function update() {
+                        if (activeApp === null) { // Only drift when no app is open
+                            nodes.forEach(n => {
+                                n.x += n.vx;
+                                n.y += n.vy;
+
+                                // Bounce off walls
+                                if (n.x <= 0 || n.x >= window.innerWidth - n.width) n.vx *= -1;
+                                if (n.y <= 0 || n.y >= window.innerHeight - n.height) n.vy *= -1;
+
+                                n.el.style.transform = `translate(${n.x}px, ${n.y}px)`;
+                            });
+                        }
+                        animationFrameId = requestAnimationFrame(update);
+                    }
+                    update();
                 }
 
                 function openApp(appName) {
@@ -289,7 +332,7 @@ class MainWindow(QMainWindow):
                     document.getElementById('body-' + appName)?.classList.remove('hide');
                     
                     if(appName === 'sketch') {
-                        setTimeout(resizeCanvas, 50); // Ensure layout is computed
+                        setTimeout(resizeCanvas, 50);
                         initSketch();
                     }
                 }

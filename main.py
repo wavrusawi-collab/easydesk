@@ -78,13 +78,6 @@ class Bridge(QObject):
             with open(path, 'w', encoding='utf-8') as f: f.write(content)
         self.refreshFiles()
 
-    @pyqtSlot(str, str, str)
-    def sendSecret(self, recipient, name, payload_json):
-        dest_dir = self.base_dir / recipient
-        if dest_dir.exists():
-            with open(dest_dir / (name + ".secret"), 'w', encoding='utf-8') as f: f.write(payload_json)
-        self.refreshFiles()
-
     @pyqtSlot(str)
     def deleteFile(self, filename):
         if not self.current_user: return
@@ -111,85 +104,92 @@ class MainWindow(QMainWindow):
             <script src="https://unpkg.com/lucide@latest"></script>
             <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
             <style>
-                :root { --accent: #60a5fa; }
+                :root { --accent: #60a5fa; --glass: rgba(15, 23, 42, 0.85); }
                 body { 
-                    background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%); 
+                    background: #020617; 
                     height: 100vh; overflow: hidden; font-family: 'Inter', sans-serif; color: white;
                 }
                 
-                .mesh {
-                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    background: radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
-                                radial-gradient(circle at 80% 70%, rgba(236, 72, 153, 0.1) 0%, transparent 40%);
-                    z-index: -1; animation: meshFlow 20s infinite alternate;
+                /* Advanced Mesh Background with Parallax */
+                .mesh-container {
+                    position: fixed; inset: -10%; width: 120%; height: 120%;
+                    background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%);
+                    z-index: -1; transition: transform 0.1s ease-out;
                 }
-                @keyframes meshFlow { 0% { transform: scale(1); } 100% { transform: scale(1.2) rotate(5deg); } }
+                .mesh-glow {
+                    position: absolute; width: 40%; height: 40%;
+                    background: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, transparent 70%);
+                    filter: blur(80px); animation: pulse Glow 8s infinite alternate;
+                }
 
                 .hide { display: none !important; }
                 
                 .app-shell {
-                    position: fixed; inset: 10%;
-                    background: rgba(15, 23, 42, 0.9);
-                    backdrop-filter: blur(50px) saturate(160%);
-                    border: 1px solid rgba(255, 255, 255, 0.15);
-                    border-radius: 4rem;
+                    position: fixed; inset: 8%;
+                    background: var(--glass);
+                    backdrop-filter: blur(60px) saturate(180%);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 5rem;
                     display: flex; flex-direction: column;
-                    box-shadow: 0 50px 100px rgba(0,0,0,0.8);
-                    z-index: 1000; transform: scale(0.8); opacity: 0; pointer-events: none;
-                    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+                    box-shadow: 0 50px 100px rgba(0,0,0,0.9);
+                    z-index: 1000; transform: scale(0.7) translateY(50px); opacity: 0; pointer-events: none;
+                    transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
                 }
-                .app-shell.active { transform: scale(1); opacity: 1; pointer-events: auto; }
+                .app-shell.active { transform: scale(1) translateY(0); opacity: 1; pointer-events: auto; }
 
                 .orb-launcher {
                     position: fixed; bottom: 3rem; left: 50%; transform: translateX(-50%);
-                    display: flex; gap: 1.5rem; padding: 1.2rem 2.2rem;
-                    background: rgba(255, 255, 255, 0.08); border-radius: 4rem;
+                    display: flex; gap: 1.5rem; padding: 1.2rem;
+                    background: rgba(255, 255, 255, 0.05); border-radius: 5rem;
                     backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1);
-                    z-index: 2000;
+                    z-index: 2000; transition: transform 0.4s;
                 }
-                .orb {
-                    width: 3.5rem; height: 3.5rem; border-radius: 50%;
-                    display: flex; align-items: center; justify-content: center;
-                    cursor: pointer; transition: all 0.3s;
-                    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-                }
-                .orb:hover { transform: translateY(-0.8rem) scale(1.15); filter: brightness(1.2); }
+                .orb-launcher:hover { transform: translateX(-50%) scale(1.05); }
 
+                .orb {
+                    width: 4rem; height: 4rem; border-radius: 50%;
+                    display: flex; align-items: center; justify-content: center;
+                    cursor: pointer; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+                }
+                .orb:hover { transform: translateY(-1.5rem) scale(1.2); filter: brightness(1.3); }
+
+                /* Physics Nodes */
                 .node {
-                    position: absolute; width: 7rem; height: 7rem; border-radius: 50%;
-                    background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+                    position: absolute; width: 8rem; height: 8rem; border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
                     display: flex; flex-direction: column; align-items: center; justify-content: center;
-                    cursor: pointer; transition: background 0.4s, border-color 0.4s, scale 0.4s;
-                    z-index: 10; pointer-events: auto;
+                    cursor: pointer; z-index: 10; pointer-events: auto;
+                    transition: background 0.4s, border-color 0.4s, scale 0.6s cubic-bezier(0.16, 1, 0.3, 1);
                     will-change: transform;
                 }
-                .node:hover { background: rgba(255, 255, 255, 0.15); border-color: var(--accent); scale: 1.1; z-index: 20; }
-                .node span { font-size: 0.75rem; margin-top: 0.5rem; max-width: 85%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; pointer-events: none; }
-                .node i { pointer-events: none; }
+                .node:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--accent); scale: 1.15; z-index: 20; }
+                .node span { font-size: 0.7rem; margin-top: 0.6rem; max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.6; }
 
                 input, textarea { background: transparent; border: none; outline: none; color: white; }
-                .btn-primary { background: var(--accent); color: white; padding: 0.8rem 1.8rem; border-radius: 1.8rem; font-weight: 600; transition: transform 0.2s; }
-                .btn-primary:active { transform: scale(0.95); }
+                .btn-primary { background: var(--accent); color: white; padding: 1rem 2rem; border-radius: 2rem; font-weight: 700; transition: all 0.3s; }
+                .btn-primary:hover { filter: brightness(1.2); transform: scale(1.05); }
                 
                 canvas { background: transparent; cursor: crosshair; touch-action: none; display: block; }
-                
-                .app-body { overflow-y: auto; flex: 1; }
-                .app-body::-webkit-scrollbar { width: 6px; }
-                .app-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+                .app-body { overflow-y: auto; flex: 1; padding: 2rem; }
             </style>
         </head>
         <body>
-            <div class="mesh"></div>
+            <div id="bg" class="mesh-container">
+                <div class="mesh-glow" style="top: 20%; left: 20%;"></div>
+                <div class="mesh-glow" style="bottom: 10%; right: 10%; background: radial-gradient(circle, rgba(236, 72, 153, 0.15) 0%, transparent 70%);"></div>
+            </div>
+            
             <div id="constellation" class="fixed inset-0 pointer-events-none"></div>
 
             <div id="screen-login" class="fixed inset-0 flex items-center justify-center z-[5000]">
-                <div class="text-center space-y-10">
-                    <h1 class="text-6xl font-thin tracking-[0.5em] uppercase opacity-80">EasyDesk</h1>
-                    <div class="space-y-6">
-                        <input id="u" type="text" placeholder="IDENTITY" class="text-center w-72 p-4 border-b border-white/10 text-xl focus:border-white/50 transition-all uppercase tracking-widest">
-                        <input id="p" type="password" placeholder="PHASE" class="text-center w-72 p-4 block mx-auto border-b border-white/10 text-xl focus:border-white/50 transition-all uppercase tracking-widest">
+                <div class="text-center space-y-12">
+                    <h1 class="text-7xl font-thin tracking-[0.6em] uppercase opacity-90 animate-pulse">EasyDesk</h1>
+                    <div class="space-y-4">
+                        <input id="u" type="text" placeholder="IDENTITY" class="text-center w-80 p-5 border-b border-white/5 text-2xl focus:border-white/40 transition-all uppercase tracking-widest">
+                        <input id="p" type="password" placeholder="PHASE" class="text-center w-80 p-5 block mx-auto border-b border-white/5 text-2xl focus:border-white/40 transition-all uppercase tracking-widest">
                     </div>
-                    <button onclick="login()" class="text-xs tracking-[0.3em] opacity-40 hover:opacity-100 hover:tracking-[0.4em] transition-all">INITIALIZE_SYSTEM</button>
+                    <button onclick="login()" class="text-xs tracking-[0.5em] opacity-30 hover:opacity-100 transition-all cursor-pointer">START_SEQUENCE</button>
                 </div>
             </div>
 
@@ -198,40 +198,40 @@ class MainWindow(QMainWindow):
                     <div class="orb bg-blue-500/20 text-blue-300" onclick="openApp('diary')"><i data-lucide="edit-3"></i></div>
                     <div class="orb bg-yellow-500/20 text-yellow-300" onclick="openApp('tasks')"><i data-lucide="check-circle"></i></div>
                     <div class="orb bg-orange-500/20 text-orange-300" onclick="openApp('sketch')"><i data-lucide="palette"></i></div>
-                    <div class="orb bg-red-500/20 text-red-300" onclick="signOut()"><i data-lucide="power"></i></div>
+                    <div class="orb bg-red-950/40 text-red-400" onclick="signOut()"><i data-lucide="power"></i></div>
                 </div>
             </div>
 
             <div id="app-shell" class="app-shell">
                 <div class="p-16 flex-1 flex flex-col overflow-hidden">
-                    <div id="header-diary" class="app-header hide flex items-center gap-6 mb-10">
-                        <input id="d-name" type="text" placeholder="Untitled Note" class="text-4xl font-light flex-1">
+                    <div id="header-diary" class="app-header hide flex items-center gap-8 mb-12">
+                        <input id="d-name" type="text" placeholder="New Thought" class="text-5xl font-light flex-1">
                         <button onclick="saveDiary()" class="btn-primary">Preserve</button>
-                        <button onclick="closeApp()" class="opacity-30 hover:opacity-100 transition-opacity"><i data-lucide="x"></i></button>
+                        <button onclick="closeApp()" class="w-12 h-12 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10"><i data-lucide="x"></i></button>
                     </div>
-                    <div id="header-tasks" class="app-header hide flex items-center gap-6 mb-10">
-                        <input id="t-name" type="text" placeholder="Objective Board" class="text-4xl font-light flex-1">
-                        <button onclick="addTaskRow()" class="px-5 py-2 border border-white/10 rounded-2xl hover:bg-white/5">+ Task</button>
+                    <div id="header-tasks" class="app-header hide flex items-center gap-8 mb-12">
+                        <input id="t-name" type="text" placeholder="Objectives" class="text-5xl font-light flex-1">
+                        <button onclick="addTaskRow()" class="px-6 py-3 border border-white/10 rounded-full hover:bg-white/5">+ Task</button>
                         <button onclick="saveTasks()" class="btn-primary">Sync</button>
-                        <button onclick="closeApp()" class="opacity-30 hover:opacity-100 transition-opacity"><i data-lucide="x"></i></button>
+                        <button onclick="closeApp()" class="w-12 h-12 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10"><i data-lucide="x"></i></button>
                     </div>
-                    <div id="header-sketch" class="app-header hide flex items-center gap-6 mb-10">
-                        <input id="sk-name" type="text" placeholder="Visual Capture" class="text-4xl font-light flex-1">
-                        <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl">
+                    <div id="header-sketch" class="app-header hide flex items-center gap-8 mb-12">
+                        <input id="sk-name" type="text" placeholder="Visual Capture" class="text-5xl font-light flex-1">
+                        <div class="flex items-center gap-6 bg-white/5 px-6 py-3 rounded-full">
                             <input id="sk-color" type="color" value="#60a5fa" class="w-8 h-8 bg-transparent cursor-pointer">
-                            <input id="sk-size" type="range" min="1" max="50" value="5" class="w-20 accent-blue-400">
+                            <input id="sk-size" type="range" min="1" max="100" value="5" class="w-32 accent-blue-400">
                         </div>
-                        <button onclick="saveSketch()" class="btn-primary">Snapshot</button>
-                        <button onclick="closeApp()" class="opacity-30 hover:opacity-100 transition-opacity"><i data-lucide="x"></i></button>
+                        <button onclick="saveSketch()" class="btn-primary">Capture</button>
+                        <button onclick="closeApp()" class="w-12 h-12 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10"><i data-lucide="x"></i></button>
                     </div>
 
                     <div id="body-diary" class="app-body hide">
-                        <textarea id="d-body" class="w-full h-full text-xl leading-relaxed placeholder:opacity-5 resize-none" placeholder="Begin transmission..."></textarea>
+                        <textarea id="d-body" class="w-full h-full text-2xl leading-relaxed placeholder:opacity-5 resize-none" placeholder="Empty space..."></textarea>
                     </div>
                     <div id="body-tasks" class="app-body hide space-y-4">
                         <div id="t-container" class="space-y-4"></div>
                     </div>
-                    <div id="body-sketch" class="app-body hide relative rounded-[2.5rem] overflow-hidden bg-black/20 border border-white/5">
+                    <div id="body-sketch" class="app-body hide relative rounded-[3rem] overflow-hidden bg-black/40 border border-white/10">
                         <canvas id="sk-canvas"></canvas>
                     </div>
                 </div>
@@ -243,9 +243,16 @@ class MainWindow(QMainWindow):
                 const canvas = document.getElementById('sk-canvas');
                 let ctx, drawing = false;
                 
-                // Drift physics state
                 let nodes = [];
                 let animationFrameId = null;
+
+                // Parallax background effect
+                window.addEventListener('mousemove', (e) => {
+                    if (activeApp) return;
+                    const x = (e.clientX / window.innerWidth - 0.5) * 30;
+                    const y = (e.clientY / window.innerHeight - 0.5) * 30;
+                    document.getElementById('bg').style.transform = `translate(${x}px, ${y}px)`;
+                });
 
                 new QWebChannel(qt.webChannelTransport, function(channel) {
                     pybridge = channel.objects.pybridge;
@@ -262,13 +269,11 @@ class MainWindow(QMainWindow):
                 function login() { pybridge.handleLogin(document.getElementById('u').value, document.getElementById('p').value); }
 
                 function signOut() {
-                    // Logic to clear session and return to login
                     document.getElementById('screen-login').classList.remove('hide');
                     document.getElementById('screen-home').classList.add('hide');
                     document.getElementById('constellation').innerHTML = '';
                     nodes = [];
                     if (animationFrameId) cancelAnimationFrame(animationFrameId);
-                    // Clear inputs
                     document.getElementById('u').value = '';
                     document.getElementById('p').value = '';
                 }
@@ -282,18 +287,17 @@ class MainWindow(QMainWindow):
                         const el = document.createElement('div');
                         el.className = 'node';
                         
-                        // Initial random position and velocity
                         const nodeData = {
                             el: el,
-                            x: Math.random() * (window.innerWidth - 120),
-                            y: Math.random() * (window.innerHeight - 120),
-                            vx: (Math.random() - 0.5) * 0.5, // Slow drift
-                            vy: (Math.random() - 0.5) * 0.5,
-                            width: 112, // 7rem
-                            height: 112
+                            x: Math.random() * (window.innerWidth - 150),
+                            y: Math.random() * (window.innerHeight - 150),
+                            vx: (Math.random() - 0.5) * 0.4,
+                            vy: (Math.random() - 0.5) * 0.4,
+                            width: 128,
+                            height: 128
                         };
                         
-                        const icons = { diary: 'file-text', tasks: 'check-circle', sketch: 'image', flashcards: 'zap', secret: 'lock' };
+                        const icons = { diary: 'file-text', tasks: 'check-circle', sketch: 'image', flashcards: 'zap' };
                         el.innerHTML = `<i data-lucide="${icons[f.type] || 'circle'}"></i><span>${f.name}</span>`;
                         el.onclick = (e) => { e.stopPropagation(); loadFile(f); };
                         
@@ -305,17 +309,12 @@ class MainWindow(QMainWindow):
 
                 function startDrift() {
                     if (animationFrameId) cancelAnimationFrame(animationFrameId);
-                    
                     function update() {
-                        if (activeApp === null) { // Only drift when no app is open
+                        if (activeApp === null) {
                             nodes.forEach(n => {
-                                n.x += n.vx;
-                                n.y += n.vy;
-
-                                // Bounce off walls
+                                n.x += n.vx; n.y += n.vy;
                                 if (n.x <= 0 || n.x >= window.innerWidth - n.width) n.vx *= -1;
                                 if (n.y <= 0 || n.y >= window.innerHeight - n.height) n.vy *= -1;
-
                                 n.el.style.transform = `translate(${n.x}px, ${n.y}px)`;
                             });
                         }
@@ -330,10 +329,8 @@ class MainWindow(QMainWindow):
                     document.querySelectorAll('.app-header, .app-body').forEach(el => el.classList.add('hide'));
                     document.getElementById('header-' + appName)?.classList.remove('hide');
                     document.getElementById('body-' + appName)?.classList.remove('hide');
-                    
                     if(appName === 'sketch') {
-                        setTimeout(resizeCanvas, 50);
-                        initSketch();
+                        setTimeout(() => { resizeCanvas(); initSketch(); }, 100);
                     }
                 }
 
@@ -367,16 +364,10 @@ class MainWindow(QMainWindow):
 
                 function initSketch() {
                     ctx = canvas.getContext('2d');
-                    ctx.lineCap = 'round';
-                    ctx.lineJoin = 'round';
-                    
+                    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
                     canvas.onmousedown = (e) => { drawing = true; startPos(e); };
                     canvas.onmousemove = draw;
                     window.onmouseup = () => { drawing = false; ctx.beginPath(); };
-                    
-                    canvas.ontouchstart = (e) => { e.preventDefault(); drawing = true; startPos(e.touches[0]); };
-                    canvas.ontouchmove = (e) => { e.preventDefault(); draw(e.touches[0]); };
-                    canvas.ontouchend = () => { drawing = false; ctx.beginPath(); };
                 }
 
                 function startPos(e) {
@@ -396,22 +387,22 @@ class MainWindow(QMainWindow):
 
                 function saveSketch() {
                     const data = canvas.toDataURL();
-                    pybridge.saveFile(document.getElementById('sk-name').value || 'Vision', JSON.stringify({image:data}), 'sketch');
+                    pybridge.saveFile(document.getElementById('sk-name').value || 'Snapshot', JSON.stringify({image:data}), 'sketch');
                     closeApp();
                 }
 
                 function saveDiary() {
-                    pybridge.saveFile(document.getElementById('d-name').value || 'Transmission', document.getElementById('d-body').value, 'diary');
+                    pybridge.saveFile(document.getElementById('d-name').value || 'Thought', document.getElementById('d-body').value, 'diary');
                     closeApp();
                 }
 
                 function addTaskRow(text = "", done = false) {
                     const div = document.createElement('div');
-                    div.className = "flex items-center gap-4 bg-white/5 p-4 rounded-3xl border border-white/5 hover:border-white/10 transition-all";
+                    div.className = "flex items-center gap-6 bg-white/5 p-6 rounded-[2rem] border border-white/5 hover:border-white/20 transition-all group";
                     div.innerHTML = `
-                        <input type="checkbox" ${done ? 'checked' : ''} class="w-6 h-6 rounded-full border-2 border-white/20 appearance-none checked:bg-blue-400 checked:border-transparent transition-all cursor-pointer">
-                        <input type="text" value="${text}" placeholder="New objective..." class="flex-1 text-lg">
-                        <button onclick="this.parentElement.remove()" class="opacity-20 hover:opacity-100 hover:text-red-400"><i data-lucide="trash-2"></i></button>
+                        <input type="checkbox" ${done ? 'checked' : ''} class="w-8 h-8 rounded-full border-2 border-white/10 appearance-none checked:bg-blue-400 checked:border-transparent transition-all cursor-pointer">
+                        <input type="text" value="${text}" placeholder="Identity task..." class="flex-1 text-2xl font-light">
+                        <button onclick="this.parentElement.remove()" class="opacity-0 group-hover:opacity-100 text-red-400 transition-opacity"><i data-lucide="trash-2"></i></button>
                     `;
                     document.getElementById('t-container').appendChild(div);
                     lucide.createIcons();

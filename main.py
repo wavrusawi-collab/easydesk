@@ -110,16 +110,15 @@ class MainWindow(QMainWindow):
                     height: 100vh; overflow: hidden; font-family: 'Inter', sans-serif; color: white;
                 }
                 
-                /* Advanced Mesh Background with Parallax */
                 .mesh-container {
                     position: fixed; inset: -10%; width: 120%; height: 120%;
                     background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%);
-                    z-index: -1; transition: transform 0.1s ease-out;
+                    z-index: -1; transition: transform 0.2s ease-out;
                 }
                 .mesh-glow {
                     position: absolute; width: 40%; height: 40%;
                     background: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, transparent 70%);
-                    filter: blur(80px); animation: pulse Glow 8s infinite alternate;
+                    filter: blur(80px);
                 }
 
                 .hide { display: none !important; }
@@ -144,31 +143,41 @@ class MainWindow(QMainWindow):
                     backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1);
                     z-index: 2000; transition: transform 0.4s;
                 }
-                .orb-launcher:hover { transform: translateX(-50%) scale(1.05); }
 
                 .orb {
                     width: 4rem; height: 4rem; border-radius: 50%;
                     display: flex; align-items: center; justify-content: center;
                     cursor: pointer; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-                    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
                 }
                 .orb:hover { transform: translateY(-1.5rem) scale(1.2); filter: brightness(1.3); }
 
-                /* Physics Nodes */
-                .node {
-                    position: absolute; width: 8rem; height: 8rem; border-radius: 50%;
-                    background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
-                    display: flex; flex-direction: column; align-items: center; justify-content: center;
-                    cursor: pointer; z-index: 10; pointer-events: auto;
-                    transition: background 0.4s, border-color 0.4s, scale 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+                /* Physics Nodes - Fix glitchy hover by separating transforms */
+                .node-wrapper {
+                    position: absolute; width: 8rem; height: 8rem;
+                    z-index: 10; pointer-events: auto;
                     will-change: transform;
                 }
-                .node:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--accent); scale: 1.15; z-index: 20; }
+                
+                .node {
+                    width: 100%; height: 100%; border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
+                    display: flex; flex-direction: column; align-items: center; justify-content: center;
+                    cursor: pointer;
+                    transition: background 0.4s, border-color 0.4s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+                }
+                
+                /* Applying scale to the inner element so it doesn't fight the wrapper's translate */
+                .node-wrapper:hover .node { 
+                    background: rgba(255, 255, 255, 0.12); 
+                    border-color: var(--accent); 
+                    transform: scale(1.15); 
+                }
+                .node-wrapper:hover { z-index: 20; }
+                
                 .node span { font-size: 0.7rem; margin-top: 0.6rem; max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.6; }
 
                 input, textarea { background: transparent; border: none; outline: none; color: white; }
                 .btn-primary { background: var(--accent); color: white; padding: 1rem 2rem; border-radius: 2rem; font-weight: 700; transition: all 0.3s; }
-                .btn-primary:hover { filter: brightness(1.2); transform: scale(1.05); }
                 
                 canvas { background: transparent; cursor: crosshair; touch-action: none; display: block; }
                 .app-body { overflow-y: auto; flex: 1; padding: 2rem; }
@@ -184,7 +193,7 @@ class MainWindow(QMainWindow):
 
             <div id="screen-login" class="fixed inset-0 flex items-center justify-center z-[5000]">
                 <div class="text-center space-y-12">
-                    <h1 class="text-7xl font-thin tracking-[0.6em] uppercase opacity-90 animate-pulse">EasyDesk</h1>
+                    <h1 class="text-7xl font-thin tracking-[0.6em] uppercase opacity-90">EasyDesk</h1>
                     <div class="space-y-4">
                         <input id="u" type="text" placeholder="IDENTITY" class="text-center w-80 p-5 border-b border-white/5 text-2xl focus:border-white/40 transition-all uppercase tracking-widest">
                         <input id="p" type="password" placeholder="PHASE" class="text-center w-80 p-5 block mx-auto border-b border-white/5 text-2xl focus:border-white/40 transition-all uppercase tracking-widest">
@@ -246,7 +255,6 @@ class MainWindow(QMainWindow):
                 let nodes = [];
                 let animationFrameId = null;
 
-                // Parallax background effect
                 window.addEventListener('mousemove', (e) => {
                     if (activeApp) return;
                     const x = (e.clientX / window.innerWidth - 0.5) * 30;
@@ -284,11 +292,14 @@ class MainWindow(QMainWindow):
                     nodes = [];
                     
                     files.forEach((f, i) => {
-                        const el = document.createElement('div');
-                        el.className = 'node';
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'node-wrapper';
+                        
+                        const inner = document.createElement('div');
+                        inner.className = 'node';
                         
                         const nodeData = {
-                            el: el,
+                            el: wrapper,
                             x: Math.random() * (window.innerWidth - 150),
                             y: Math.random() * (window.innerHeight - 150),
                             vx: (Math.random() - 0.5) * 0.4,
@@ -298,10 +309,11 @@ class MainWindow(QMainWindow):
                         };
                         
                         const icons = { diary: 'file-text', tasks: 'check-circle', sketch: 'image', flashcards: 'zap' };
-                        el.innerHTML = `<i data-lucide="${icons[f.type] || 'circle'}"></i><span>${f.name}</span>`;
-                        el.onclick = (e) => { e.stopPropagation(); loadFile(f); };
+                        inner.innerHTML = `<i data-lucide="${icons[f.type] || 'circle'}"></i><span>${f.name}</span>`;
+                        wrapper.onclick = (e) => { e.stopPropagation(); loadFile(f); };
                         
-                        container.appendChild(el);
+                        wrapper.appendChild(inner);
+                        container.appendChild(wrapper);
                         nodes.push(nodeData);
                     });
                     lucide.createIcons();
@@ -315,7 +327,8 @@ class MainWindow(QMainWindow):
                                 n.x += n.vx; n.y += n.vy;
                                 if (n.x <= 0 || n.x >= window.innerWidth - n.width) n.vx *= -1;
                                 if (n.y <= 0 || n.y >= window.innerHeight - n.height) n.vy *= -1;
-                                n.el.style.transform = `translate(${n.x}px, ${n.y}px)`;
+                                // Direct translate on wrapper
+                                n.el.style.transform = `translate3d(${n.x}px, ${n.y}px, 0)`;
                             });
                         }
                         animationFrameId = requestAnimationFrame(update);

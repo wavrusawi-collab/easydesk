@@ -7,6 +7,13 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtCore import QObject, pyqtSlot, pyqtSignal, Qt
 
+# Helper to find the correct path whether running as script or as frozen EXE
+def get_base_path():
+    if getattr(sys, 'frozen', False):
+        # If running as EXE, use the directory of the EXE
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
 class Bridge(QObject):
     loginSuccess = pyqtSignal(str)
     loadFiles = pyqtSignal(str)
@@ -15,9 +22,10 @@ class Bridge(QObject):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        self.base_dir = Path("data")
+        self.root_dir = get_base_path()
+        self.base_dir = self.root_dir / "data"
         self.base_dir.mkdir(exist_ok=True)
-        self.users_file = Path("users.json")
+        self.users_file = self.root_dir / "users.json"
         self.current_user = None
 
     @pyqtSlot(str, str)
@@ -151,7 +159,6 @@ class MainWindow(QMainWindow):
                 }
                 .orb:hover { transform: translateY(-1.5rem) scale(1.2); filter: brightness(1.3); }
 
-                /* Physics Nodes Container */
                 .node-wrapper {
                     position: absolute; width: 8rem; height: 8rem;
                     z-index: 10; pointer-events: auto;
@@ -166,7 +173,6 @@ class MainWindow(QMainWindow):
                     transition: background 0.4s, border-color 0.4s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
                 }
                 
-                /* Applying scale to the inner element ONLY */
                 .node-wrapper:hover .node { 
                     background: rgba(255, 255, 255, 0.12); 
                     border-color: var(--accent); 
@@ -255,7 +261,6 @@ class MainWindow(QMainWindow):
                 let nodes = [];
                 let animationFrameId = null;
 
-                // Parallax Background Effect
                 window.addEventListener('mousemove', (e) => {
                     if (activeApp) return;
                     const x = (e.clientX / window.innerWidth - 0.5) * 30;
@@ -268,7 +273,7 @@ class MainWindow(QMainWindow):
                     pybridge.loginSuccess.connect((u) => {
                         document.getElementById('screen-login').classList.add('hide');
                         document.getElementById('screen-home').classList.remove('hide');
-                        startDrift(); // Restored drift loop start
+                        startDrift();
                     });
                     pybridge.loadFiles.connect((json) => {
                         renderConstellation(JSON.parse(json));
@@ -326,10 +331,8 @@ class MainWindow(QMainWindow):
                         if (activeApp === null) {
                             nodes.forEach(n => {
                                 n.x += n.vx; n.y += n.vy;
-                                // Bounce off edges
                                 if (n.x <= 0 || n.x >= window.innerWidth - n.width) n.vx *= -1;
                                 if (n.y <= 0 || n.y >= window.innerHeight - n.height) n.vy *= -1;
-                                // Apply position to wrapper to avoid hover fight
                                 n.el.style.transform = `translate3d(${n.x}px, ${n.y}px, 0)`;
                             });
                         }

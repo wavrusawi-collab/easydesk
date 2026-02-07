@@ -56,7 +56,10 @@ class Bridge(QObject):
             if not ftype: continue
             try:
                 with open(f, 'r', encoding='utf-8') as file:
-                    content = json.load(file) if f.suffix in ['.json', '.sketch', '.secret', '.cards'] else file.read()
+                    if f.suffix in ['.json', '.sketch', '.secret', '.cards']:
+                        content = json.load(file)
+                    else:
+                        content = file.read()
                 files.append({"name": f.name, "content": content, "type": ftype})
             except: continue
         self.loadFiles.emit(json.dumps(files))
@@ -66,13 +69,20 @@ class Bridge(QObject):
         if not self.current_user: return
         exts = {"diary": ".md", "tasks": ".json", "sketch": ".sketch", "secret": ".secret", "flashcards": ".cards"}
         ext = exts.get(ftype, ".txt")
+        if not name.strip(): name = "Untitled"
         if not name.endswith(ext): name += ext
+        
         path = self.base_dir / self.current_user / name
         try:
+            # Try to see if it's JSON content (Tasks, Sketch, Secret, Cards)
             data = json.loads(content)
-            with open(path, 'w', encoding='utf-8') as f: json.dump(data, f)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(data, f)
         except:
-            with open(path, 'w', encoding='utf-8') as f: f.write(content)
+            # Otherwise save as plain text (Diary)
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(content)
+        
         self.refreshFiles()
 
     @pyqtSlot(str)
@@ -160,6 +170,7 @@ class MainWindow(QMainWindow):
                     font-weight: 700;
                     box-shadow: 0 4px 0 #558B2F;
                     transition: all 0.1s;
+                    cursor: pointer;
                 }
                 .nav-pill:active { transform: translateY(4px); box-shadow: none; }
 
@@ -183,7 +194,7 @@ class MainWindow(QMainWindow):
                 .flip-front, .flip-back {
                     position: absolute; width: 100%; height: 100%;
                     backface-visibility: hidden; border-radius: 2rem;
-                    display: flex; items-center; justify-center; padding: 2rem;
+                    display: flex; align-items: center; justify-content: center; padding: 2rem;
                     font-size: 2rem; font-weight: bold; border: 8px solid var(--leaf-light);
                 }
                 .flip-front { background: white; color: var(--bark); }
@@ -250,11 +261,11 @@ class MainWindow(QMainWindow):
             <!-- App Overlay -->
             <div id="app-overlay" class="overlay">
                 <div class="flex items-center gap-4 mb-8">
-                    <button onclick="closeApp()" class="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm">
+                    <button onclick="closeApp()" class="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm hover:bg-gray-50">
                         <i data-lucide="chevron-left" class="text-bark"></i>
                     </button>
                     <input id="file-title" class="flex-1 text-2xl font-bold bg-white" placeholder="Untitled...">
-                    <button id="save-btn" class="nav-pill">Save & Close</button>
+                    <button id="save-btn" onclick="triggerSave()" class="nav-pill">Save & Close</button>
                 </div>
 
                 <!-- Diary UI -->
@@ -269,6 +280,9 @@ class MainWindow(QMainWindow):
                 <!-- Sketch UI -->
                 <div id="ui-sketch" class="flex-1 hide bg-white rounded-3xl border-4 border-leaf-light overflow-hidden relative shadow-lg">
                     <canvas id="paint-canvas"></canvas>
+                    <div class="absolute top-4 right-4 flex gap-2">
+                        <button onclick="ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='white'; ctx.fillRect(0,0,canvas.width,canvas.height);" class="p-2 bg-white rounded-lg shadow"><i data-lucide="eraser" class="w-5 h-5"></i></button>
+                    </div>
                 </div>
 
                 <!-- Secret Message UI -->
@@ -293,9 +307,9 @@ class MainWindow(QMainWindow):
                             </div>
                         </div>
                         <div class="flex gap-4">
-                            <button onclick="prevCard()" class="nav-pill bg-bark">Back</button>
-                            <span id="card-counter" class="font-bold text-2xl px-4">0 / 0</span>
-                            <button onclick="nextCard()" class="nav-pill bg-bark">Next</button>
+                            <button onclick="prevCard()" class="nav-pill !bg-bark !shadow-[#4E342E]">Back</button>
+                            <span id="card-counter" class="font-bold text-2xl px-4 flex items-center">0 / 0</span>
+                            <button onclick="nextCard()" class="nav-pill !bg-bark !shadow-[#4E342E]">Next</button>
                         </div>
                     </div>
                     <div class="bubble p-6 h-48 overflow-y-auto">
@@ -352,42 +366,62 @@ class MainWindow(QMainWindow):
 
                     if(file.type === 'diary') {
                         document.getElementById('diary-box').value = file.content;
-                        document.getElementById('save-btn').onclick = () => { pybridge.saveFile(file_title.value, diary_box.value, 'diary'); closeApp(); };
                     } 
                     else if(file.type === 'tasks') {
                         document.getElementById('task-items').innerHTML = '';
                         file.content.forEach(t => addTaskRow(t.text, t.done));
-                        document.getElementById('save-btn').onclick = () => {
-                            const data = Array.from(document.querySelectorAll('#task-items > div')).map(d => ({ text: d.querySelector('input[type="text"]').value, done: d.querySelector('input[type="checkbox"]').checked }));
-                            pybridge.saveFile(file_title.value, JSON.stringify(data), 'tasks'); closeApp();
-                        };
                     } 
                     else if(file.type === 'sketch') {
                         resizeCanvas();
-                        if(file.content.image) { let img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0); img.src = file.content.image; }
-                        else { ctx.fillStyle = "white"; ctx.fillRect(0,0,canvas.width,canvas.height); }
-                        document.getElementById('save-btn').onclick = () => { pybridge.saveFile(file_title.value, JSON.stringify({image: canvas.toDataURL()}), 'sketch'); closeApp(); };
+                        if(file.content.image) { 
+                            let img = new Image(); 
+                            img.onload = () => ctx.drawImage(img, 0, 0); 
+                            img.src = file.content.image; 
+                        } else { 
+                            ctx.fillStyle = "white"; 
+                            ctx.fillRect(0,0,canvas.width,canvas.height); 
+                        }
                     }
                     else if(file.type === 'secret') {
                         document.getElementById('secret-plain').value = file.content.plain || '';
                         updateSecret();
-                        document.getElementById('save-btn').onclick = () => {
-                            pybridge.saveFile(file_title.value, JSON.stringify({plain: secret_plain.value}), 'secret'); closeApp();
-                        };
                     }
                     else if(file.type === 'flashcards') {
                         currentCards = Array.isArray(file.content) ? file.content : [];
                         currentCardIdx = 0;
                         renderFlashEditor();
                         updateCardDisplay();
-                        document.getElementById('save-btn').onclick = () => {
-                            saveFlashData();
-                            pybridge.saveFile(file_title.value, JSON.stringify(currentCards), 'flashcards'); closeApp();
-                        };
                     }
                 }
 
-                function newFile(type) { openFile({name: 'New ' + type, type: type, content: type === 'tasks' || type === 'flashcards' ? [] : (type === 'sketch' || type === 'secret' ? {} : '')}); }
+                function triggerSave() {
+                    const title = document.getElementById('file-title').value;
+                    let content = "";
+
+                    if(activeType === 'diary') {
+                        content = document.getElementById('diary-box').value;
+                    } else if(activeType === 'tasks') {
+                        const data = Array.from(document.querySelectorAll('#task-items > div')).map(d => ({ 
+                            text: d.querySelector('input[type="text"]').value, 
+                            done: d.querySelector('input[type="checkbox"]').checked 
+                        }));
+                        content = JSON.stringify(data);
+                    } else if(activeType === 'sketch') {
+                        content = JSON.stringify({image: canvas.toDataURL()});
+                    } else if(activeType === 'secret') {
+                        content = JSON.stringify({plain: document.getElementById('secret-plain').value});
+                    } else if(activeType === 'flashcards') {
+                        saveFlashData();
+                        content = JSON.stringify(currentCards);
+                    }
+
+                    pybridge.saveFile(title, content, activeType);
+                    closeApp();
+                }
+
+                function newFile(type) { 
+                    openFile({name: 'Untitled', type: type, content: type === 'tasks' || type === 'flashcards' ? [] : (type === 'sketch' || type === 'secret' ? {} : '')}); 
+                }
 
                 // Secret Message Logic
                 function caesar(str, shift) {
@@ -402,8 +436,8 @@ class MainWindow(QMainWindow):
                 // Flashcard Logic
                 function addFlashRow(q='', a='') {
                     const row = document.createElement('div');
-                    row.className = 'flex gap-2';
-                    row.innerHTML = `<input type="text" placeholder="Question" value="${q}" class="flex-1 text-sm"><input type="text" placeholder="Answer" value="${a}" class="flex-1 text-sm">`;
+                    row.className = 'flex gap-2 mb-2';
+                    row.innerHTML = `<input type="text" placeholder="Question" value="${q}" class="flex-1 text-sm"><input type="text" placeholder="Answer" value="${a}" class="flex-1 text-sm"><button onclick="this.parentElement.remove()" class="text-red-400">×</button>`;
                     document.getElementById('flash-editor-list').appendChild(row);
                 }
                 function renderFlashEditor() {
@@ -411,10 +445,10 @@ class MainWindow(QMainWindow):
                     currentCards.forEach(c => addFlashRow(c.q, c.a));
                 }
                 function saveFlashData() {
-                    currentCards = Array.from(document.querySelectorAll('#flash-editor-list > div')).map(div => ({
-                        q: div.querySelectorAll('input')[0].value,
-                        a: div.querySelectorAll('input')[1].value
-                    })).filter(c => c.q || c.a);
+                    currentCards = Array.from(document.querySelectorAll('#flash-editor-list > div')).map(div => {
+                        const inputs = div.querySelectorAll('input');
+                        return { q: inputs[0].value, a: inputs[1].value };
+                    }).filter(c => c.q || c.a);
                 }
                 function updateCardDisplay() {
                     document.getElementById('card-display').classList.remove('flipped');
@@ -434,7 +468,7 @@ class MainWindow(QMainWindow):
                 function addTaskRow(text = '', done = false) {
                     const row = document.createElement('div');
                     row.className = 'flex items-center gap-4 bg-white/60 p-4 rounded-2xl border-2 border-leaf-light';
-                    row.innerHTML = `<input type="checkbox" ${done ? 'checked' : ''} class="w-6 h-6 accent-grass"><input type="text" value="${text}" placeholder="New task..." class="flex-1 bg-transparent border-none !p-0">`;
+                    row.innerHTML = `<input type="checkbox" ${done ? 'checked' : ''} class="w-6 h-6 accent-grass"><input type="text" value="${text}" placeholder="New task..." class="flex-1 bg-transparent border-none !p-0"><button onclick="this.parentElement.remove()" class="text-red-400">×</button>`;
                     document.getElementById('task-items').appendChild(row);
                 }
 
@@ -442,6 +476,8 @@ class MainWindow(QMainWindow):
                     const rect = canvas.parentElement.getBoundingClientRect();
                     canvas.width = rect.width; canvas.height = rect.height;
                     ctx.lineCap = 'round'; ctx.lineWidth = 6; ctx.strokeStyle = '#6D4C41';
+                    ctx.fillStyle = "white";
+                    ctx.fillRect(0,0,canvas.width,canvas.height);
                 }
                 canvas.onmousedown = (e) => { drawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); };
                 canvas.onmousemove = (e) => { if(drawing) { ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke(); } };

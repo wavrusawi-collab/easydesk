@@ -74,12 +74,10 @@ class Bridge(QObject):
         
         path = self.base_dir / self.current_user / name
         try:
-            # Try to see if it's JSON content (Tasks, Sketch, Secret, Cards)
             data = json.loads(content)
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(data, f)
         except:
-            # Otherwise save as plain text (Diary)
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(content)
         
@@ -123,6 +121,7 @@ class MainWindow(QMainWindow):
                 }
 
                 body { 
+                    transition: background-color 2s ease;
                     background-color: var(--sky);
                     background-image: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0%, transparent 25%);
                     color: var(--bark); 
@@ -130,6 +129,12 @@ class MainWindow(QMainWindow):
                     height: 100vh; overflow: hidden; margin: 0;
                 }
                 
+                /* Dynamic Lighting Themes */
+                body.theme-sunrise { background-color: #FFECB3; } /* Soft morning light */
+                body.theme-day { background-color: #E3F2FD; }     /* Bright sky blue */
+                body.theme-sunset { background-color: #FFCCBC; }  /* Warm evening glow */
+                body.theme-night { background-color: #C5CAE9; }   /* Cool night tint */
+
                 .font-organic { font-family: 'Gaegu', cursive; }
 
                 .bubble {
@@ -155,7 +160,7 @@ class MainWindow(QMainWindow):
                 .overlay {
                     position: fixed; inset: 0; z-index: 5000;
                     display: none; padding: 2rem;
-                    background: rgba(227, 242, 253, 0.98);
+                    background: rgba(255, 255, 255, 0.95);
                     backdrop-filter: blur(10px);
                 }
                 .overlay.active { display: flex; flex-direction: column; animation: fadeIn 0.4s ease; }
@@ -201,7 +206,7 @@ class MainWindow(QMainWindow):
                 .flip-back { background: var(--grass); color: white; transform: rotateY(180deg); }
             </style>
         </head>
-        <body class="flex flex-col">
+        <body class="flex flex-col theme-day">
             <!-- Login -->
             <div id="login" class="fixed inset-0 z-[9999] bg-[#E3F2FD] flex items-center justify-center p-10">
                 <div class="bubble p-12 text-center w-full max-w-sm space-y-6">
@@ -250,9 +255,16 @@ class MainWindow(QMainWindow):
                     </section>
 
                     <section>
-                        <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
-                            <i data-lucide="container" class="text-amber-700"></i> Your Collection
-                        </h2>
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-xl font-bold flex items-center gap-2">
+                                <i data-lucide="container" class="text-amber-700"></i> Your Collection
+                            </h2>
+                            <!-- Quick Search -->
+                            <div class="relative w-64">
+                                <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40"></i>
+                                <input id="search-bar" type="text" placeholder="Find in the forest..." oninput="filterFiles()" class="w-full !p-2 !pl-10 text-sm bg-white/50 border-leaf-light">
+                            </div>
+                        </div>
                         <div id="file-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 pb-12"></div>
                     </section>
                 </div>
@@ -264,7 +276,10 @@ class MainWindow(QMainWindow):
                     <button onclick="closeApp()" class="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm hover:bg-gray-50">
                         <i data-lucide="chevron-left" class="text-bark"></i>
                     </button>
-                    <input id="file-title" class="flex-1 text-2xl font-bold bg-white" placeholder="Untitled...">
+                    <div class="flex-1 flex flex-col">
+                        <input id="file-title" class="text-2xl font-bold bg-transparent border-none p-0" placeholder="Untitled...">
+                        <span id="save-status" class="text-xs text-grass font-bold opacity-0 transition-opacity">Autosaved</span>
+                    </div>
                     <button id="save-btn" onclick="triggerSave()" class="nav-pill">Save & Close</button>
                 </div>
 
@@ -281,7 +296,7 @@ class MainWindow(QMainWindow):
                 <div id="ui-sketch" class="flex-1 hide bg-white rounded-3xl border-4 border-leaf-light overflow-hidden relative shadow-lg">
                     <canvas id="paint-canvas"></canvas>
                     <div class="absolute top-4 right-4 flex gap-2">
-                        <button onclick="ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='white'; ctx.fillRect(0,0,canvas.width,canvas.height);" class="p-2 bg-white rounded-lg shadow"><i data-lucide="eraser" class="w-5 h-5"></i></button>
+                        <button onclick="ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='white'; ctx.fillRect(0,0,canvas.width,canvas.height);" class="p-2 bg-white rounded-lg shadow hover:bg-red-50"><i data-lucide="eraser" class="w-5 h-5 text-red-400"></i></button>
                     </div>
                 </div>
 
@@ -322,6 +337,7 @@ class MainWindow(QMainWindow):
             <script>
                 let pybridge;
                 let activeType = null;
+                let allFiles = [];
                 const canvas = document.getElementById('paint-canvas');
                 const ctx = canvas.getContext('2d');
                 let drawing = false;
@@ -336,11 +352,32 @@ class MainWindow(QMainWindow):
                         document.getElementById('login').classList.add('hide');
                         document.getElementById('dashboard').classList.remove('hide');
                         document.getElementById('welcome-text').innerText = "Hello, " + user + "!";
+                        updateDynamicLighting();
+                        startAutosaveTimer();
                     });
-                    pybridge.loadFiles.connect(json => renderFiles(JSON.parse(json)));
+                    pybridge.loadFiles.connect(json => {
+                        allFiles = JSON.parse(json);
+                        filterFiles();
+                    });
                 });
 
                 function login() { pybridge.handleLogin(u.value, p.value); }
+
+                function updateDynamicLighting() {
+                    const hour = new Date().getHours();
+                    const body = document.body;
+                    body.className = "flex flex-col"; // Reset
+                    if (hour >= 5 && hour < 9) body.classList.add('theme-sunrise');
+                    else if (hour >= 9 && hour < 17) body.classList.add('theme-day');
+                    else if (hour >= 17 && hour < 20) body.classList.add('theme-sunset');
+                    else body.classList.add('theme-night');
+                }
+
+                function filterFiles() {
+                    const query = document.getElementById('search-bar').value.toLowerCase();
+                    const filtered = allFiles.filter(f => f.name.toLowerCase().includes(query));
+                    renderFiles(filtered);
+                }
 
                 function renderFiles(files) {
                     const grid = document.getElementById('file-grid');
@@ -394,8 +431,8 @@ class MainWindow(QMainWindow):
                     }
                 }
 
-                function triggerSave() {
-                    const title = document.getElementById('file-title').value;
+                function triggerSave(silent = false) {
+                    const title = document.getElementById('file-title').value || "Untitled";
                     let content = "";
 
                     if(activeType === 'diary') {
@@ -416,7 +453,24 @@ class MainWindow(QMainWindow):
                     }
 
                     pybridge.saveFile(title, content, activeType);
-                    closeApp();
+                    
+                    if (silent) {
+                        const status = document.getElementById('save-status');
+                        status.style.opacity = "1";
+                        setTimeout(() => status.style.opacity = "0", 2000);
+                    } else {
+                        closeApp();
+                    }
+                }
+
+                function startAutosaveTimer() {
+                    setInterval(() => {
+                        const overlay = document.getElementById('app-overlay');
+                        // Only autosave if an app is actually open and it's a type that supports text editing
+                        if (overlay.classList.contains('active') && (activeType === 'diary' || activeType === 'tasks')) {
+                            triggerSave(true);
+                        }
+                    }, 15000); // 15 seconds
                 }
 
                 function newFile(type) { 
@@ -484,6 +538,9 @@ class MainWindow(QMainWindow):
                 window.onmouseup = () => drawing = false;
 
                 function closeApp() { document.getElementById('app-overlay').classList.remove('active'); }
+                
+                // Keep lighting updated every hour
+                setInterval(updateDynamicLighting, 3600000);
                 lucide.createIcons();
             </script>
         </body>

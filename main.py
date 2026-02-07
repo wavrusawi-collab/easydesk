@@ -50,13 +50,13 @@ class Bridge(QObject):
         if not self.current_user: return
         user_dir = self.base_dir / self.current_user
         files = []
-        ext_map = {'.md': 'diary', '.json': 'tasks', '.sketch': 'sketch'}
+        ext_map = {'.md': 'diary', '.json': 'tasks', '.sketch': 'sketch', '.secret': 'secret', '.cards': 'flashcards'}
         for f in user_dir.glob("*"):
             ftype = ext_map.get(f.suffix)
             if not ftype: continue
             try:
                 with open(f, 'r', encoding='utf-8') as file:
-                    content = json.load(file) if f.suffix in ['.json', '.sketch'] else file.read()
+                    content = json.load(file) if f.suffix in ['.json', '.sketch', '.secret', '.cards'] else file.read()
                 files.append({"name": f.name, "content": content, "type": ftype})
             except: continue
         self.loadFiles.emit(json.dumps(files))
@@ -64,7 +64,7 @@ class Bridge(QObject):
     @pyqtSlot(str, str, str)
     def saveFile(self, name, content, ftype):
         if not self.current_user: return
-        exts = {"diary": ".md", "tasks": ".json", "sketch": ".sketch"}
+        exts = {"diary": ".md", "tasks": ".json", "sketch": ".sketch", "secret": ".secret", "flashcards": ".cards"}
         ext = exts.get(ftype, ".txt")
         if not name.endswith(ext): name += ext
         path = self.base_dir / self.current_user / name
@@ -73,6 +73,13 @@ class Bridge(QObject):
             with open(path, 'w', encoding='utf-8') as f: json.dump(data, f)
         except:
             with open(path, 'w', encoding='utf-8') as f: f.write(content)
+        self.refreshFiles()
+
+    @pyqtSlot(str)
+    def deleteFile(self, filename):
+        if not self.current_user: return
+        path = self.base_dir / self.current_user / filename
+        if path.exists(): os.remove(path)
         self.refreshFiles()
 
 class MainWindow(QMainWindow):
@@ -94,164 +101,243 @@ class MainWindow(QMainWindow):
             <script src="https://unpkg.com/lucide@latest"></script>
             <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
             <style>
-                @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600&display=swap');
-                :root { --accent: #818cf8; --bg: #030712; }
+                @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&family=Gaegu:wght@400;700&display=swap');
+                
+                :root {
+                    --grass: #88B04B;
+                    --bark: #6D4C41;
+                    --leaf-light: #C5E1A5;
+                    --sky: #E3F2FD;
+                    --flower: #F48FB1;
+                    --wood: #A1887F;
+                }
+
                 body { 
-                    background: var(--bg); color: white;
-                    font-family: 'Plus Jakarta Sans', sans-serif;
-                    height: 100vh; overflow: hidden;
-                    perspective: 1000px;
+                    background-color: var(--sky);
+                    background-image: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0%, transparent 25%);
+                    color: var(--bark); 
+                    font-family: 'Nunito', sans-serif;
+                    height: 100vh; overflow: hidden; margin: 0;
                 }
                 
-                .glass {
-                    background: rgba(255, 255, 255, 0.03);
-                    backdrop-filter: blur(20px);
-                    border: 1px solid rgba(255, 255, 255, 0.08);
+                .font-organic { font-family: 'Gaegu', cursive; }
+
+                .bubble {
+                    background: white;
+                    border-radius: 2rem;
+                    box-shadow: 0 10px 0 rgba(0,0,0,0.05);
+                    border: 4px solid white;
                 }
 
-                /* Sidebar */
-                .sidebar {
-                    width: 300px; height: 100vh;
-                    padding: 3rem 2rem; border-right: 1px solid rgba(255,255,255,0.05);
+                .leaf-card {
+                    background: white;
+                    border-radius: 1.5rem 4rem 1.5rem 4rem;
+                    transition: all 0.3s ease;
+                    cursor: pointer;
+                    border: 3px solid transparent;
+                }
+                .leaf-card:hover {
+                    transform: translateY(-5px) rotate(1deg);
+                    border-color: var(--grass);
+                    box-shadow: 0 15px 30px rgba(136, 176, 75, 0.2);
                 }
 
-                /* Main Grid */
-                .main-view {
-                    flex: 1; padding: 4rem; overflow-y: auto;
-                    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                    gap: 2rem; align-content: start;
-                }
-
-                .file-card {
-                    padding: 2rem; border-radius: 2rem;
-                    transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
-                    cursor: pointer; position: relative;
-                    transform-style: preserve-3d;
-                }
-                .file-card:hover {
-                    background: rgba(255, 255, 255, 0.07);
-                    transform: translateY(-10px) rotateX(5deg) rotateY(5deg);
-                    border-color: var(--accent);
-                }
-                .file-card i { color: var(--accent); margin-bottom: 1.5rem; }
-
-                /* Fullscreen Apps */
-                .app-overlay {
+                .overlay {
                     position: fixed; inset: 0; z-index: 5000;
-                    background: var(--bg); display: none;
-                    padding: 5rem; flex-direction: column;
+                    display: none; padding: 2rem;
+                    background: rgba(227, 242, 253, 0.98);
+                    backdrop-filter: blur(10px);
                 }
-                .app-overlay.active { display: flex; animation: fadeIn 0.4s ease; }
-
-                @keyframes fadeIn { from { opacity: 0; transform: scale(1.05); } to { opacity: 1; transform: scale(1); } }
-
-                input, textarea { background: transparent; border: none; outline: none; color: white; width: 100%; }
-                .action-btn {
-                    padding: 0.8rem 1.5rem; border-radius: 1rem;
-                    background: var(--accent); font-weight: 600;
-                    transition: 0.3s;
-                }
-                .action-btn:hover { filter: brightness(1.2); transform: scale(1.05); }
+                .overlay.active { display: flex; flex-direction: column; animation: fadeIn 0.4s ease; }
                 
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+                .nav-pill {
+                    background: var(--grass);
+                    color: white;
+                    padding: 0.75rem 2rem;
+                    border-radius: 999px;
+                    font-weight: 700;
+                    box-shadow: 0 4px 0 #558B2F;
+                    transition: all 0.1s;
+                }
+                .nav-pill:active { transform: translateY(4px); box-shadow: none; }
+
+                input, textarea { 
+                    background: rgba(255,255,255,0.7); border: 2px solid var(--leaf-light); 
+                    border-radius: 1.5rem; padding: 1rem; outline: none; 
+                    font-family: inherit;
+                }
+                textarea:focus { border-color: var(--grass); background: white; }
+
                 .hide { display: none !important; }
+
+                /* Flashcard Flip */
+                .flip-card { perspective: 1000px; width: 100%; height: 300px; }
+                .flip-card-inner {
+                    position: relative; width: 100%; height: 100%;
+                    text-align: center; transition: transform 0.6s;
+                    transform-style: preserve-3d; cursor: pointer;
+                }
+                .flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+                .flip-front, .flip-back {
+                    position: absolute; width: 100%; height: 100%;
+                    backface-visibility: hidden; border-radius: 2rem;
+                    display: flex; items-center; justify-center; padding: 2rem;
+                    font-size: 2rem; font-weight: bold; border: 8px solid var(--leaf-light);
+                }
+                .flip-front { background: white; color: var(--bark); }
+                .flip-back { background: var(--grass); color: white; transform: rotateY(180deg); }
             </style>
         </head>
-        <body class="flex">
-            <!-- Login Screen -->
-            <div id="login-screen" class="fixed inset-0 z-[9000] bg-[#030712] flex items-center justify-center">
-                <div class="w-96 space-y-8 text-center">
-                    <div class="w-20 h-20 bg-indigo-500/20 rounded-3xl mx-auto flex items-center justify-center mb-10">
-                        <i data-lucide="layers" class="text-indigo-400 w-10 h-10"></i>
+        <body class="flex flex-col">
+            <!-- Login -->
+            <div id="login" class="fixed inset-0 z-[9999] bg-[#E3F2FD] flex items-center justify-center p-10">
+                <div class="bubble p-12 text-center w-full max-w-sm space-y-6">
+                    <div class="w-20 h-20 bg-[#C5E1A5] rounded-full mx-auto flex items-center justify-center">
+                        <i data-lucide="sprout" class="text-[#558B2F] w-10 h-10"></i>
                     </div>
-                    <h2 class="text-3xl font-semibold tracking-tight">Welcome back</h2>
-                    <input id="u" type="text" placeholder="Identity" class="glass p-4 rounded-2xl text-center">
-                    <input id="p" type="password" placeholder="Passkey" class="glass p-4 rounded-2xl text-center">
-                    <button onclick="login()" class="action-btn w-full py-4 mt-4">Initialize Session</button>
+                    <h1 class="text-3xl font-organic font-bold">Nature Desk</h1>
+                    <input id="u" type="text" placeholder="Your Name" class="w-full text-center">
+                    <input id="p" type="password" placeholder="Passkey" class="w-full text-center">
+                    <button onclick="login()" class="nav-pill w-full text-xl">Enter the Grove</button>
                 </div>
             </div>
 
             <!-- Dashboard -->
-            <div id="sidebar" class="sidebar flex flex-col hide">
-                <div class="flex items-center gap-3 mb-12">
-                    <div class="w-8 h-8 bg-indigo-500 rounded-lg"></div>
-                    <span class="font-bold text-xl tracking-tighter">EasyDesk</span>
-                </div>
-                
-                <nav class="space-y-2 flex-1">
-                    <button onclick="newFile('diary')" class="w-full text-left p-4 rounded-xl hover:bg-white/5 flex items-center gap-3">
-                        <i data-lucide="plus" class="w-4 h-4"></i> New Journal
-                    </button>
-                    <button onclick="newFile('tasks')" class="w-full text-left p-4 rounded-xl hover:bg-white/5 flex items-center gap-3">
-                        <i data-lucide="plus" class="w-4 h-4"></i> New Task List
-                    </button>
-                    <button onclick="newFile('sketch')" class="w-full text-left p-4 rounded-xl hover:bg-white/5 flex items-center gap-3">
-                        <i data-lucide="plus" class="w-4 h-4"></i> New Sketch
-                    </button>
-                </nav>
+            <div id="dashboard" class="hide h-full flex flex-col p-8">
+                <header class="flex justify-between items-center mb-12">
+                    <div>
+                        <h1 class="text-4xl font-organic font-bold text-bark" id="welcome-text">Hello!</h1>
+                        <p class="text-bark opacity-60">Welcome back to your quiet corner.</p>
+                    </div>
+                    <button onclick="location.reload()" class="text-bark opacity-40 hover:opacity-100 font-bold transition-opacity">Sign Out</button>
+                </header>
 
-                <button onclick="location.reload()" class="p-4 rounded-xl text-red-400 hover:bg-red-400/10 flex items-center gap-3">
-                    <i data-lucide="log-out" class="w-4 h-4"></i> Terminate
-                </button>
+                <div class="flex-1 overflow-y-auto space-y-12">
+                    <section>
+                        <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+                            <i data-lucide="sparkles" class="text-yellow-500"></i> New Activity
+                        </h2>
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                            <div class="leaf-card p-6 flex flex-col items-center gap-3 bg-white" onclick="newFile('diary')">
+                                <i data-lucide="feather" class="text-pink-400"></i><span class="font-bold text-sm">Note</span>
+                            </div>
+                            <div class="leaf-card p-6 flex flex-col items-center gap-3 bg-white" onclick="newFile('tasks')">
+                                <i data-lucide="list-checks" class="text-emerald-500"></i><span class="font-bold text-sm">Tasks</span>
+                            </div>
+                            <div class="leaf-card p-6 flex flex-col items-center gap-3 bg-white" onclick="newFile('sketch')">
+                                <i data-lucide="palette" class="text-blue-500"></i><span class="font-bold text-sm">Sketch</span>
+                            </div>
+                            <div class="leaf-card p-6 flex flex-col items-center gap-3 bg-white" onclick="newFile('secret')">
+                                <i data-lucide="lock" class="text-amber-600"></i><span class="font-bold text-sm">Secret</span>
+                            </div>
+                            <div class="leaf-card p-6 flex flex-col items-center gap-3 bg-white" onclick="newFile('flashcards')">
+                                <i data-lucide="layers" class="text-purple-500"></i><span class="font-bold text-sm">Cards</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+                            <i data-lucide="container" class="text-amber-700"></i> Your Collection
+                        </h2>
+                        <div id="file-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 pb-12"></div>
+                    </section>
+                </div>
             </div>
 
-            <main id="main-grid" class="main-view hide"></main>
+            <!-- App Overlay -->
+            <div id="app-overlay" class="overlay">
+                <div class="flex items-center gap-4 mb-8">
+                    <button onclick="closeApp()" class="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm">
+                        <i data-lucide="chevron-left" class="text-bark"></i>
+                    </button>
+                    <input id="file-title" class="flex-1 text-2xl font-bold bg-white" placeholder="Untitled...">
+                    <button id="save-btn" class="nav-pill">Save & Close</button>
+                </div>
 
-            <!-- App Overlays -->
-            <div id="app-wrap" class="app-overlay">
-                <div class="flex items-center justify-between mb-12">
-                    <input id="app-title" class="text-4xl font-bold max-w-2xl" placeholder="Untitled Document">
-                    <div class="flex gap-4">
-                        <button id="save-trigger" class="action-btn">Save Changes</button>
-                        <button onclick="closeApp()" class="glass p-3 rounded-xl hover:bg-white/10"><i data-lucide="x"></i></button>
+                <!-- Diary UI -->
+                <div id="ui-diary" class="flex-1 hide"><textarea id="diary-box" class="w-full h-full text-lg leading-relaxed shadow-inner" placeholder="Once upon a time..."></textarea></div>
+                
+                <!-- Tasks UI -->
+                <div id="ui-tasks" class="flex-1 hide space-y-4 overflow-y-auto">
+                    <div id="task-items" class="space-y-3"></div>
+                    <button onclick="addTaskRow()" class="w-full py-4 border-2 border-dashed border-leaf-light rounded-2xl text-leaf-light hover:text-grass font-bold">+ New Task</button>
+                </div>
+
+                <!-- Sketch UI -->
+                <div id="ui-sketch" class="flex-1 hide bg-white rounded-3xl border-4 border-leaf-light overflow-hidden relative shadow-lg">
+                    <canvas id="paint-canvas"></canvas>
+                </div>
+
+                <!-- Secret Message UI -->
+                <div id="ui-secret" class="flex-1 hide flex flex-col gap-6">
+                    <div class="bubble p-8 space-y-4">
+                        <label class="font-bold opacity-60">Normal Message:</label>
+                        <textarea id="secret-plain" class="w-full h-32" oninput="updateSecret()"></textarea>
+                    </div>
+                    <div class="bubble p-8 space-y-4 bg-bark/5 border-bark/10">
+                        <label class="font-bold text-amber-800">Secret Code:</label>
+                        <textarea id="secret-encoded" class="w-full h-32 text-amber-800 font-mono" oninput="updatePlain()"></textarea>
                     </div>
                 </div>
 
-                <div id="diary-ui" class="flex-1 hide">
-                    <textarea id="diary-content" class="h-full text-xl leading-relaxed opacity-80" placeholder="Start writing..."></textarea>
-                </div>
-
-                <div id="tasks-ui" class="flex-1 hide overflow-y-auto space-y-4">
-                    <div id="task-list" class="space-y-3"></div>
-                    <button onclick="addTaskRow()" class="text-indigo-400 p-2">+ Add Objective</button>
-                </div>
-
-                <div id="sketch-ui" class="flex-1 hide bg-black/20 rounded-3xl overflow-hidden border border-white/5">
-                    <canvas id="sketch-pad" class="w-full h-full"></canvas>
+                <!-- Flashcards UI -->
+                <div id="ui-flashcards" class="flex-1 hide flex flex-col gap-8">
+                    <div class="flex-1 flex flex-col items-center justify-center gap-8">
+                        <div id="card-display" class="flip-card" onclick="this.classList.toggle('flipped')">
+                            <div class="flip-card-inner">
+                                <div class="flip-front" id="card-q">Click + to add a card!</div>
+                                <div class="flip-back" id="card-a">Answer will show here.</div>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <button onclick="prevCard()" class="nav-pill bg-bark">Back</button>
+                            <span id="card-counter" class="font-bold text-2xl px-4">0 / 0</span>
+                            <button onclick="nextCard()" class="nav-pill bg-bark">Next</button>
+                        </div>
+                    </div>
+                    <div class="bubble p-6 h-48 overflow-y-auto">
+                         <div id="flash-editor-list" class="space-y-2"></div>
+                         <button onclick="addFlashRow()" class="mt-4 text-grass font-bold">+ Add New Card</button>
+                    </div>
                 </div>
             </div>
 
             <script>
                 let pybridge;
                 let activeType = null;
-                const canvas = document.getElementById('sketch-pad');
+                const canvas = document.getElementById('paint-canvas');
                 const ctx = canvas.getContext('2d');
                 let drawing = false;
 
+                // Flashcard state
+                let currentCards = [];
+                let currentCardIdx = 0;
+
                 new QWebChannel(qt.webChannelTransport, function(channel) {
                     pybridge = channel.objects.pybridge;
-                    pybridge.loginSuccess.connect(() => {
-                        document.getElementById('login-screen').classList.add('hide');
-                        document.getElementById('sidebar').classList.remove('hide');
-                        document.getElementById('main-grid').classList.remove('hide');
+                    pybridge.loginSuccess.connect((user) => {
+                        document.getElementById('login').classList.add('hide');
+                        document.getElementById('dashboard').classList.remove('hide');
+                        document.getElementById('welcome-text').innerText = "Hello, " + user + "!";
                     });
-                    pybridge.loadFiles.connect((json) => renderFiles(JSON.parse(json)));
+                    pybridge.loadFiles.connect(json => renderFiles(JSON.parse(json)));
                 });
 
                 function login() { pybridge.handleLogin(u.value, p.value); }
 
                 function renderFiles(files) {
-                    const grid = document.getElementById('main-grid');
+                    const grid = document.getElementById('file-grid');
                     grid.innerHTML = '';
                     files.forEach(f => {
                         const card = document.createElement('div');
-                        card.className = 'file-card glass';
-                        const icon = f.type === 'diary' ? 'file-text' : (f.type === 'tasks' ? 'list-checks' : 'palette');
-                        card.innerHTML = `
-                            <i data-lucide="${icon}" class="w-10 h-10"></i>
-                            <h3 class="text-lg font-semibold">${f.name}</h3>
-                            <p class="text-white/40 text-sm mt-1 uppercase tracking-widest">${f.type}</p>
-                        `;
+                        card.className = `bubble p-4 flex flex-col items-center text-center cursor-pointer hover:scale-105 transition-transform`;
+                        const icons = { diary:'feather', tasks:'list-checks', sketch:'palette', secret:'lock', flashcards:'layers' };
+                        card.innerHTML = `<div class="p-3 bg-gray-50 rounded-2xl mb-2"><i data-lucide="${icons[f.type]}" class="w-6 h-6 text-bark/60"></i></div><span class="text-sm font-bold truncate w-full px-2">${f.name.split('.')[0]}</span>`;
                         card.onclick = () => openFile(f);
+                        card.oncontextmenu = (e) => { e.preventDefault(); if(confirm("Discard this?")) pybridge.deleteFile(f.name); };
                         grid.appendChild(card);
                     });
                     lucide.createIcons();
@@ -259,71 +345,109 @@ class MainWindow(QMainWindow):
 
                 function openFile(file) {
                     activeType = file.type;
-                    document.getElementById('app-wrap').classList.add('active');
-                    document.getElementById('app-title').value = file.name.split('.')[0];
-                    
-                    document.getElementById('diary-ui').classList.add('hide');
-                    document.getElementById('tasks-ui').classList.add('hide');
-                    document.getElementById('sketch-ui').classList.add('hide');
+                    document.getElementById('app-overlay').classList.add('active');
+                    document.getElementById('file-title').value = file.name.split('.')[0];
+                    ['ui-diary', 'ui-tasks', 'ui-sketch', 'ui-secret', 'ui-flashcards'].forEach(id => document.getElementById(id).classList.add('hide'));
+                    document.getElementById('ui-' + file.type).classList.remove('hide');
 
                     if(file.type === 'diary') {
-                        document.getElementById('diary-ui').classList.remove('hide');
-                        document.getElementById('diary-content').value = file.content;
-                        document.getElementById('save-trigger').onclick = () => {
-                            pybridge.saveFile(document.getElementById('app-title').value, document.getElementById('diary-content').value, 'diary');
-                            closeApp();
-                        };
-                    } else if(file.type === 'tasks') {
-                        document.getElementById('tasks-ui').classList.remove('hide');
-                        document.getElementById('task-list').innerHTML = '';
+                        document.getElementById('diary-box').value = file.content;
+                        document.getElementById('save-btn').onclick = () => { pybridge.saveFile(file_title.value, diary_box.value, 'diary'); closeApp(); };
+                    } 
+                    else if(file.type === 'tasks') {
+                        document.getElementById('task-items').innerHTML = '';
                         file.content.forEach(t => addTaskRow(t.text, t.done));
-                        document.getElementById('save-trigger').onclick = () => {
-                            const data = Array.from(document.querySelectorAll('#task-list > div')).map(d => ({
-                                text: d.querySelector('input[type="text"]').value,
-                                done: d.querySelector('input[type="checkbox"]').checked
-                            }));
-                            pybridge.saveFile(document.getElementById('app-title').value, JSON.stringify(data), 'tasks');
-                            closeApp();
+                        document.getElementById('save-btn').onclick = () => {
+                            const data = Array.from(document.querySelectorAll('#task-items > div')).map(d => ({ text: d.querySelector('input[type="text"]').value, done: d.querySelector('input[type="checkbox"]').checked }));
+                            pybridge.saveFile(file_title.value, JSON.stringify(data), 'tasks'); closeApp();
                         };
-                    } else if(file.type === 'sketch') {
-                        document.getElementById('sketch-ui').classList.remove('hide');
+                    } 
+                    else if(file.type === 'sketch') {
                         resizeCanvas();
-                        const img = new Image();
-                        img.onload = () => ctx.drawImage(img, 0, 0);
-                        img.src = file.content.image;
-                        document.getElementById('save-trigger').onclick = () => {
-                            pybridge.saveFile(document.getElementById('app-title').value, JSON.stringify({image: canvas.toDataURL()}), 'sketch');
-                            closeApp();
+                        if(file.content.image) { let img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0); img.src = file.content.image; }
+                        else { ctx.fillStyle = "white"; ctx.fillRect(0,0,canvas.width,canvas.height); }
+                        document.getElementById('save-btn').onclick = () => { pybridge.saveFile(file_title.value, JSON.stringify({image: canvas.toDataURL()}), 'sketch'); closeApp(); };
+                    }
+                    else if(file.type === 'secret') {
+                        document.getElementById('secret-plain').value = file.content.plain || '';
+                        updateSecret();
+                        document.getElementById('save-btn').onclick = () => {
+                            pybridge.saveFile(file_title.value, JSON.stringify({plain: secret_plain.value}), 'secret'); closeApp();
+                        };
+                    }
+                    else if(file.type === 'flashcards') {
+                        currentCards = Array.isArray(file.content) ? file.content : [];
+                        currentCardIdx = 0;
+                        renderFlashEditor();
+                        updateCardDisplay();
+                        document.getElementById('save-btn').onclick = () => {
+                            saveFlashData();
+                            pybridge.saveFile(file_title.value, JSON.stringify(currentCards), 'flashcards'); closeApp();
                         };
                     }
                 }
 
-                function newFile(type) {
-                    openFile({name: 'New ' + type, type: type, content: type === 'tasks' ? [] : (type === 'sketch' ? {image:''} : '')});
-                }
+                function newFile(type) { openFile({name: 'New ' + type, type: type, content: type === 'tasks' || type === 'flashcards' ? [] : (type === 'sketch' || type === 'secret' ? {} : '')}); }
 
-                function closeApp() { document.getElementById('app-wrap').classList.remove('active'); }
+                // Secret Message Logic
+                function caesar(str, shift) {
+                    return str.replace(/[a-z]/gi, c => {
+                        const s = c <= 'Z' ? 65 : 97;
+                        return String.fromCharCode(((c.charCodeAt(0) - s + shift) % 26 + 26) % 26 + s);
+                    });
+                }
+                function updateSecret() { document.getElementById('secret-encoded').value = caesar(document.getElementById('secret-plain').value, 5); }
+                function updatePlain() { document.getElementById('secret-plain').value = caesar(document.getElementById('secret-encoded').value, -5); }
+
+                // Flashcard Logic
+                function addFlashRow(q='', a='') {
+                    const row = document.createElement('div');
+                    row.className = 'flex gap-2';
+                    row.innerHTML = `<input type="text" placeholder="Question" value="${q}" class="flex-1 text-sm"><input type="text" placeholder="Answer" value="${a}" class="flex-1 text-sm">`;
+                    document.getElementById('flash-editor-list').appendChild(row);
+                }
+                function renderFlashEditor() {
+                    document.getElementById('flash-editor-list').innerHTML = '';
+                    currentCards.forEach(c => addFlashRow(c.q, c.a));
+                }
+                function saveFlashData() {
+                    currentCards = Array.from(document.querySelectorAll('#flash-editor-list > div')).map(div => ({
+                        q: div.querySelectorAll('input')[0].value,
+                        a: div.querySelectorAll('input')[1].value
+                    })).filter(c => c.q || c.a);
+                }
+                function updateCardDisplay() {
+                    document.getElementById('card-display').classList.remove('flipped');
+                    if(currentCards.length > 0) {
+                        document.getElementById('card-q').innerText = currentCards[currentCardIdx].q;
+                        document.getElementById('card-a').innerText = currentCards[currentCardIdx].a;
+                        document.getElementById('card-counter').innerText = `${currentCardIdx + 1} / ${currentCards.length}`;
+                    } else {
+                        document.getElementById('card-q').innerText = "No cards yet!";
+                        document.getElementById('card-a').innerText = "Add them below.";
+                        document.getElementById('card-counter').innerText = "0 / 0";
+                    }
+                }
+                function nextCard() { saveFlashData(); if(currentCards.length > 0) { currentCardIdx = (currentCardIdx + 1) % currentCards.length; updateCardDisplay(); } }
+                function prevCard() { saveFlashData(); if(currentCards.length > 0) { currentCardIdx = (currentCardIdx - 1 + currentCards.length) % currentCards.length; updateCardDisplay(); } }
 
                 function addTaskRow(text = '', done = false) {
                     const row = document.createElement('div');
-                    row.className = 'flex items-center gap-4 glass p-4 rounded-2xl';
-                    row.innerHTML = `
-                        <input type="checkbox" ${done ? 'checked' : ''} class="w-6 h-6 accent-indigo-500">
-                        <input type="text" value="${text}" placeholder="Objective description..." class="flex-1">
-                    `;
-                    document.getElementById('task-list').appendChild(row);
+                    row.className = 'flex items-center gap-4 bg-white/60 p-4 rounded-2xl border-2 border-leaf-light';
+                    row.innerHTML = `<input type="checkbox" ${done ? 'checked' : ''} class="w-6 h-6 accent-grass"><input type="text" value="${text}" placeholder="New task..." class="flex-1 bg-transparent border-none !p-0">`;
+                    document.getElementById('task-items').appendChild(row);
                 }
 
-                // Sketch Logic
                 function resizeCanvas() {
-                    canvas.width = canvas.parentElement.clientWidth;
-                    canvas.height = canvas.parentElement.clientHeight;
-                    ctx.lineCap = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = '#818cf8';
+                    const rect = canvas.parentElement.getBoundingClientRect();
+                    canvas.width = rect.width; canvas.height = rect.height;
+                    ctx.lineCap = 'round'; ctx.lineWidth = 6; ctx.strokeStyle = '#6D4C41';
                 }
                 canvas.onmousedown = (e) => { drawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); };
                 canvas.onmousemove = (e) => { if(drawing) { ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke(); } };
                 window.onmouseup = () => drawing = false;
 
+                function closeApp() { document.getElementById('app-overlay').classList.remove('active'); }
                 lucide.createIcons();
             </script>
         </body>

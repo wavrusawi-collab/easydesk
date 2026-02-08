@@ -98,17 +98,17 @@ class Bridge(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        
+        # 1. Setup Window properties
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.showFullScreen()
         
-        # Main UI View
-        self.main_view = QWebEngineView()
-        self.channel = QWebChannel()
+        # 2. Setup the Bridge and Channel
         self.bridge = Bridge(self)
+        self.channel = QWebChannel()
         self.channel.registerObject('pybridge', self.bridge)
-        self.main_view.page().setWebChannel(self.channel)
 
-        # Explorer View (Overlay)
+        # 3. Create Explorer UI first to ensure attributes exist before any resizeEvents
         self.explorer_container = QWidget(self)
         self.explorer_container.hide()
         self.explorer_layout = QVBoxLayout(self.explorer_container)
@@ -132,6 +132,12 @@ class MainWindow(QMainWindow):
         self.explorer_view.setStyleSheet("border-radius: 20px; background: white;")
         self.explorer_layout.addWidget(self.explorer_view)
 
+        # 4. Setup Main UI View
+        self.main_view = QWebEngineView()
+        self.main_view.page().setWebChannel(self.channel)
+        self.setCentralWidget(self.main_view)
+
+        # 5. Connect signals
         self.bridge.openBrowser.connect(self.show_explorer)
 
         self.html_content = """
@@ -271,7 +277,6 @@ class MainWindow(QMainWindow):
         </html>
         """
         self.main_view.setHtml(self.html_content)
-        self.setCentralWidget(self.main_view)
 
     def show_explorer(self, url):
         self.url_input.setText(url)
@@ -286,7 +291,8 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if self.explorer_container.isVisible():
+        # Safety check to ensure container is initialized
+        if hasattr(self, 'explorer_container') and self.explorer_container.isVisible():
             self.explorer_container.setGeometry(self.rect())
 
 if __name__ == "__main__":

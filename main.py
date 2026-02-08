@@ -120,6 +120,8 @@ class MainWindow(QMainWindow):
                     --wood: #A1887F;
                 }
 
+                * { cursor: none !important; }
+
                 body { 
                     transition: background-color 2s ease;
                     background-color: var(--sky);
@@ -129,11 +131,31 @@ class MainWindow(QMainWindow):
                     height: 100vh; overflow: hidden; margin: 0;
                 }
                 
+                /* Leaf Cursor */
+                #custom-cursor {
+                    position: fixed;
+                    width: 32px;
+                    height: 32px;
+                    pointer-events: none;
+                    z-index: 99999;
+                    transform: translate(-50%, -50%) rotate(-15deg);
+                    transition: transform 0.1s ease-out, opacity 0.2s ease;
+                    filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.1));
+                }
+                
+                #custom-cursor.clicking {
+                    transform: translate(-50%, -50%) rotate(10deg) scale(0.8);
+                }
+
+                input, textarea, [contenteditable="true"] {
+                    cursor: text !important;
+                }
+
                 /* Dynamic Lighting Themes */
-                body.theme-sunrise { background-color: #FFECB3; } /* Soft morning light */
-                body.theme-day { background-color: #E3F2FD; }     /* Bright sky blue */
-                body.theme-sunset { background-color: #FFCCBC; }  /* Warm evening glow */
-                body.theme-night { background-color: #C5CAE9; }   /* Cool night tint */
+                body.theme-sunrise { background-color: #FFECB3; } 
+                body.theme-day { background-color: #E3F2FD; }     
+                body.theme-sunset { background-color: #FFCCBC; }  
+                body.theme-night { background-color: #C5CAE9; }   
 
                 .font-organic { font-family: 'Gaegu', cursive; }
 
@@ -148,7 +170,7 @@ class MainWindow(QMainWindow):
                     background: white;
                     border-radius: 1.5rem 4rem 1.5rem 4rem;
                     transition: all 0.3s ease;
-                    cursor: pointer;
+                    cursor: none;
                     border: 3px solid transparent;
                 }
                 .leaf-card:hover {
@@ -175,7 +197,6 @@ class MainWindow(QMainWindow):
                     font-weight: 700;
                     box-shadow: 0 4px 0 #558B2F;
                     transition: all 0.1s;
-                    cursor: pointer;
                 }
                 .nav-pill:active { transform: translateY(4px); box-shadow: none; }
 
@@ -193,7 +214,7 @@ class MainWindow(QMainWindow):
                 .flip-card-inner {
                     position: relative; width: 100%; height: 100%;
                     text-align: center; transition: transform 0.6s;
-                    transform-style: preserve-3d; cursor: pointer;
+                    transform-style: preserve-3d;
                 }
                 .flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
                 .flip-front, .flip-back {
@@ -207,6 +228,15 @@ class MainWindow(QMainWindow):
             </style>
         </head>
         <body class="flex flex-col theme-day">
+            <!-- Leaf Cursor -->
+            <div id="custom-cursor">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2.00002 21.9998L3.99991 19.9999M2.00002 21.9998C12.5 21.9998 18.5 16 19.5 9.49983C20.5 2.99983 14.5 1.99983 14.5 1.99983C14.5 1.99983 14 8.49983 7 10.4998C2.5 11.7855 2.00002 16.4998 2.00002 21.9998Z" 
+                          stroke="#558B2F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#88B04B"/>
+                    <path d="M4 19.9998C7.5 16.9998 10 16.4998 13 16.9998" stroke="#558B2F" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </div>
+
             <!-- Login -->
             <div id="login" class="fixed inset-0 z-[9999] bg-[#E3F2FD] flex items-center justify-center p-10">
                 <div class="bubble p-12 text-center w-full max-w-sm space-y-6">
@@ -259,7 +289,6 @@ class MainWindow(QMainWindow):
                             <h2 class="text-xl font-bold flex items-center gap-2">
                                 <i data-lucide="container" class="text-amber-700"></i> Your Collection
                             </h2>
-                            <!-- Quick Search -->
                             <div class="relative w-64">
                                 <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40"></i>
                                 <input id="search-bar" type="text" placeholder="Find in the forest..." oninput="filterFiles()" class="w-full !p-2 !pl-10 text-sm bg-white/50 border-leaf-light">
@@ -283,16 +312,13 @@ class MainWindow(QMainWindow):
                     <button id="save-btn" onclick="triggerSave()" class="nav-pill">Save & Close</button>
                 </div>
 
-                <!-- Diary UI -->
                 <div id="ui-diary" class="flex-1 hide"><textarea id="diary-box" class="w-full h-full text-lg leading-relaxed shadow-inner" placeholder="Once upon a time..."></textarea></div>
                 
-                <!-- Tasks UI -->
                 <div id="ui-tasks" class="flex-1 hide space-y-4 overflow-y-auto">
                     <div id="task-items" class="space-y-3"></div>
                     <button onclick="addTaskRow()" class="w-full py-4 border-2 border-dashed border-leaf-light rounded-2xl text-leaf-light hover:text-grass font-bold">+ New Task</button>
                 </div>
 
-                <!-- Sketch UI -->
                 <div id="ui-sketch" class="flex-1 hide bg-white rounded-3xl border-4 border-leaf-light overflow-hidden relative shadow-lg">
                     <canvas id="paint-canvas"></canvas>
                     <div class="absolute top-4 right-4 flex gap-2">
@@ -300,7 +326,6 @@ class MainWindow(QMainWindow):
                     </div>
                 </div>
 
-                <!-- Secret Message UI -->
                 <div id="ui-secret" class="flex-1 hide flex flex-col gap-6">
                     <div class="bubble p-8 space-y-4">
                         <label class="font-bold opacity-60">Normal Message:</label>
@@ -312,7 +337,6 @@ class MainWindow(QMainWindow):
                     </div>
                 </div>
 
-                <!-- Flashcards UI -->
                 <div id="ui-flashcards" class="flex-1 hide flex flex-col gap-8">
                     <div class="flex-1 flex flex-col items-center justify-center gap-8">
                         <div id="card-display" class="flip-card" onclick="this.classList.toggle('flipped')">
@@ -342,10 +366,24 @@ class MainWindow(QMainWindow):
                 const ctx = canvas.getContext('2d');
                 let drawing = false;
 
-                // Flashcard state
-                let currentCards = [];
-                let currentCardIdx = 0;
+                const cursor = document.getElementById('custom-cursor');
 
+                // Cursor Logic
+                document.addEventListener('mousemove', (e) => {
+                    cursor.style.left = e.clientX + 'px';
+                    cursor.style.top = e.clientY + 'px';
+                    
+                    const target = e.target;
+                    const isTextInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+                    cursor.style.opacity = isTextInput ? '0' : '1';
+                });
+
+                document.addEventListener('mousedown', () => cursor.classList.add('clicking'));
+                document.addEventListener('mouseup', () => cursor.classList.remove('clicking'));
+                document.addEventListener('mouseleave', () => cursor.style.opacity = '0');
+                document.addEventListener('mouseenter', () => cursor.style.opacity = '1');
+
+                // Bridge Logic
                 new QWebChannel(qt.webChannelTransport, function(channel) {
                     pybridge = channel.objects.pybridge;
                     pybridge.loginSuccess.connect((user) => {
@@ -366,7 +404,7 @@ class MainWindow(QMainWindow):
                 function updateDynamicLighting() {
                     const hour = new Date().getHours();
                     const body = document.body;
-                    body.className = "flex flex-col"; // Reset
+                    body.className = "flex flex-col"; 
                     if (hour >= 5 && hour < 9) body.classList.add('theme-sunrise');
                     else if (hour >= 9 && hour < 17) body.classList.add('theme-day');
                     else if (hour >= 17 && hour < 20) body.classList.add('theme-sunset');
@@ -384,7 +422,7 @@ class MainWindow(QMainWindow):
                     grid.innerHTML = '';
                     files.forEach(f => {
                         const card = document.createElement('div');
-                        card.className = `bubble p-4 flex flex-col items-center text-center cursor-pointer hover:scale-105 transition-transform`;
+                        card.className = `bubble p-4 flex flex-col items-center text-center cursor-none hover:scale-105 transition-transform`;
                         const icons = { diary:'feather', tasks:'list-checks', sketch:'palette', secret:'lock', flashcards:'layers' };
                         card.innerHTML = `<div class="p-3 bg-gray-50 rounded-2xl mb-2"><i data-lucide="${icons[f.type]}" class="w-6 h-6 text-bark/60"></i></div><span class="text-sm font-bold truncate w-full px-2">${f.name.split('.')[0]}</span>`;
                         card.onclick = () => openFile(f);
@@ -434,7 +472,6 @@ class MainWindow(QMainWindow):
                 function triggerSave(silent = false) {
                     const title = document.getElementById('file-title').value || "Untitled";
                     let content = "";
-
                     if(activeType === 'diary') {
                         content = document.getElementById('diary-box').value;
                     } else if(activeType === 'tasks') {
@@ -451,9 +488,7 @@ class MainWindow(QMainWindow):
                         saveFlashData();
                         content = JSON.stringify(currentCards);
                     }
-
                     pybridge.saveFile(title, content, activeType);
-                    
                     if (silent) {
                         const status = document.getElementById('save-status');
                         status.style.opacity = "1";
@@ -466,18 +501,16 @@ class MainWindow(QMainWindow):
                 function startAutosaveTimer() {
                     setInterval(() => {
                         const overlay = document.getElementById('app-overlay');
-                        // Only autosave if an app is actually open and it's a type that supports text editing
                         if (overlay.classList.contains('active') && (activeType === 'diary' || activeType === 'tasks')) {
                             triggerSave(true);
                         }
-                    }, 15000); // 15 seconds
+                    }, 15000); 
                 }
 
                 function newFile(type) { 
                     openFile({name: 'Untitled', type: type, content: type === 'tasks' || type === 'flashcards' ? [] : (type === 'sketch' || type === 'secret' ? {} : '')}); 
                 }
 
-                // Secret Message Logic
                 function caesar(str, shift) {
                     return str.replace(/[a-z]/gi, c => {
                         const s = c <= 'Z' ? 65 : 97;
@@ -487,7 +520,9 @@ class MainWindow(QMainWindow):
                 function updateSecret() { document.getElementById('secret-encoded').value = caesar(document.getElementById('secret-plain').value, 5); }
                 function updatePlain() { document.getElementById('secret-plain').value = caesar(document.getElementById('secret-encoded').value, -5); }
 
-                // Flashcard Logic
+                let currentCards = [];
+                let currentCardIdx = 0;
+
                 function addFlashRow(q='', a='') {
                     const row = document.createElement('div');
                     row.className = 'flex gap-2 mb-2';
@@ -522,7 +557,7 @@ class MainWindow(QMainWindow):
                 function addTaskRow(text = '', done = false) {
                     const row = document.createElement('div');
                     row.className = 'flex items-center gap-4 bg-white/60 p-4 rounded-2xl border-2 border-leaf-light';
-                    row.innerHTML = `<input type="checkbox" ${done ? 'checked' : ''} class="w-6 h-6 accent-grass"><input type="text" value="${text}" placeholder="New task..." class="flex-1 bg-transparent border-none !p-0"><button onclick="this.parentElement.remove()" class="text-red-400">×</button>`;
+                    row.innerHTML = `<input type="checkbox" ${done ? 'checked' : ''} class="w-6 h-6 accent-grass"><input type="text" value="${text}" placeholder="New task..." class="flex-1 bg-transparent border-none !p-0 cursor-none"><button onclick="this.parentElement.remove()" class="text-red-400">×</button>`;
                     document.getElementById('task-items').appendChild(row);
                 }
 
@@ -539,7 +574,6 @@ class MainWindow(QMainWindow):
 
                 function closeApp() { document.getElementById('app-overlay').classList.remove('active'); }
                 
-                // Keep lighting updated every hour
                 setInterval(updateDynamicLighting, 3600000);
                 lucide.createIcons();
             </script>

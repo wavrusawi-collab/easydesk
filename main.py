@@ -15,7 +15,7 @@ def get_base_path():
 class Bridge(QObject):
     loginSuccess = pyqtSignal(str)
     loadFiles = pyqtSignal(str)
-    openBrowser = pyqtSignal(str) # New signal to trigger the native browser view
+    openBrowser = pyqtSignal(str)
 
     def __init__(self, parent):
         super().__init__()
@@ -108,28 +108,30 @@ class MainWindow(QMainWindow):
         self.channel = QWebChannel()
         self.channel.registerObject('pybridge', self.bridge)
 
-        # 3. Create Explorer UI first to ensure attributes exist before any resizeEvents
+        # 3. Create Explorer UI
         self.explorer_container = QWidget(self)
         self.explorer_container.hide()
         self.explorer_layout = QVBoxLayout(self.explorer_container)
         self.explorer_layout.setContentsMargins(20, 20, 20, 20)
         
-        # Explorer Toolbar
         toolbar = QHBoxLayout()
         back_btn = QPushButton("← Back to Grove")
-        back_btn.setStyleSheet("background: #88B04B; color: white; border-radius: 15px; padding: 10px 20px; font-weight: bold;")
+        back_btn.setStyleSheet("background: #88B04B; color: white; border-radius: 15px; padding: 10px 20px; font-weight: bold; border: none;")
         back_btn.clicked.connect(self.hide_explorer)
         
-        self.url_input = QLineEdit()
-        self.url_input.setStyleSheet("padding: 10px; border-radius: 15px; border: 2px solid #C5E1A5;")
-        self.url_input.returnPressed.connect(lambda: self.explorer_view.setUrl(QUrl(self.url_input.text() if "://" in self.url_input.text() else "https://" + self.url_input.text())))
+        # Internal URL tracking (hidden address bar)
+        self.url_display = QLineEdit()
+        self.url_display.setReadOnly(True)
+        self.url_display.hide() # Completely hidden per request "remove the address bar"
         
         toolbar.addWidget(back_btn)
-        toolbar.addWidget(self.url_input)
+        toolbar.addStretch()
         self.explorer_layout.addLayout(toolbar)
 
         self.explorer_view = QWebEngineView()
         self.explorer_view.setStyleSheet("border-radius: 20px; background: white;")
+        # Handle page changes automatically
+        self.explorer_view.urlChanged.connect(self.handle_url_change)
         self.explorer_layout.addWidget(self.explorer_view)
 
         # 4. Setup Main UI View
@@ -161,8 +163,6 @@ class MainWindow(QMainWindow):
                 .overlay.active { display: flex; flex-direction: column; }
                 .nav-pill { background: var(--grass); color: white; padding: 0.75rem 2rem; border-radius: 999px; font-weight: 700; box-shadow: 0 4px 0 #558B2F; }
                 .hide { display: none !important; }
-                .fav-icon { width: 80px; height: 80px; border-radius: 1.5rem; background: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 0 #ddd; transition: 0.2s; }
-                .fav-icon:hover { transform: scale(1.1); }
             </style>
         </head>
         <body class="flex flex-col theme-day">
@@ -170,7 +170,7 @@ class MainWindow(QMainWindow):
             
             <div id="login" class="fixed inset-0 z-[9999] bg-[#E3F2FD] flex items-center justify-center p-10">
                 <div class="bubble p-12 text-center w-full max-w-sm space-y-6">
-                    <h1 class="text-3xl font-bold">Nature Desk</h1>
+                    <h1 class="text-3xl font-bold text-bark">Nature Desk</h1>
                     <input id="u" type="text" placeholder="Your Name" class="w-full text-center p-3 rounded-xl border">
                     <input id="p" type="password" placeholder="Passkey" class="w-full text-center p-3 rounded-xl border">
                     <button onclick="login()" class="nav-pill w-full">Enter the Grove</button>
@@ -185,30 +185,20 @@ class MainWindow(QMainWindow):
 
                 <div class="flex-1 overflow-y-auto space-y-12">
                     <section>
-                        <h2 class="text-xl font-bold mb-6">Explorer Tools</h2>
-                        <div class="flex gap-6 overflow-x-auto pb-4">
-                            <button onclick="pybridge.launchExplorer('https://scratch.mit.edu')" class="fav-icon flex-col gap-1"><img src="https://scratch.mit.edu/favicon.ico" class="w-8"><span>Scratch</span></button>
-                            <button onclick="pybridge.launchExplorer('https://www.kiddle.co')" class="fav-icon flex-col gap-1"><img src="https://www.kiddle.co/favicon.ico" class="w-8"><span>Kiddle</span></button>
-                            <button onclick="pybridge.launchExplorer('https://pbskids.org')" class="fav-icon flex-col gap-1"><img src="https://pbskids.org/favicon.ico" class="w-8"><span>PBS Kids</span></button>
-                            <button onclick="pybridge.launchExplorer('https://clever.com')" class="fav-icon flex-col gap-1"><img src="https://clever.com/favicon.ico" class="w-8"><span>Clever</span></button>
-                            <button onclick="pybridge.launchExplorer('https://www.classlink.com')" class="fav-icon flex-col gap-1"><img src="https://www.classlink.com/favicon.ico" class="w-8"><span>Classlink</span></button>
-                        </div>
-                    </section>
-                    
-                    <section>
-                        <h2 class="text-xl font-bold mb-6">Create New</h2>
-                        <div class="grid grid-cols-5 gap-4">
+                        <h2 class="text-xl font-bold mb-6 text-bark/60 uppercase tracking-widest text-sm">Create New</h2>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                             <div class="leaf-card p-6 flex flex-col items-center gap-3" onclick="newFile('diary')"><i data-lucide="feather"></i><span>Note</span></div>
                             <div class="leaf-card p-6 flex flex-col items-center gap-3" onclick="newFile('tasks')"><i data-lucide="list-checks"></i><span>Tasks</span></div>
                             <div class="leaf-card p-6 flex flex-col items-center gap-3" onclick="newFile('sketch')"><i data-lucide="palette"></i><span>Sketch</span></div>
                             <div class="leaf-card p-6 flex flex-col items-center gap-3" onclick="newFile('secret')"><i data-lucide="lock"></i><span>Secret</span></div>
                             <div class="leaf-card p-6 flex flex-col items-center gap-3" onclick="newFile('flashcards')"><i data-lucide="layers"></i><span>Cards</span></div>
+                            <div class="leaf-card p-6 flex flex-col items-center gap-3 text-blue-500" onclick="pybridge.launchExplorer('https://www.google.com')"><i data-lucide="globe"></i><span>Explorer</span></div>
                         </div>
                     </section>
 
                     <section>
-                        <h2 class="text-xl font-bold mb-6">Collection</h2>
-                        <div id="file-grid" class="grid grid-cols-5 gap-4"></div>
+                        <h2 class="text-xl font-bold mb-6 text-bark/60 uppercase tracking-widest text-sm">Collection</h2>
+                        <div id="file-grid" class="grid grid-cols-2 md:grid-cols-5 gap-4"></div>
                     </section>
                 </div>
             </div>
@@ -216,14 +206,14 @@ class MainWindow(QMainWindow):
             <div id="app-overlay" class="overlay">
                 <div class="flex items-center gap-4 mb-8">
                     <button onclick="closeApp()" class="w-12 h-12 rounded-full bg-white flex items-center justify-center">←</button>
-                    <input id="file-title" class="text-2xl font-bold bg-transparent border-none flex-1">
+                    <input id="file-title" class="text-2xl font-bold bg-transparent border-none flex-1 focus:outline-none text-bark">
                     <button onclick="discardCurrent()" class="nav-pill !bg-red-400">Discard</button>
                     <button onclick="triggerSave()" class="nav-pill">Save & Close</button>
                 </div>
-                <div id="ui-diary" class="flex-1 hide"><textarea id="diary-box" class="w-full h-full p-8 rounded-3xl border"></textarea></div>
+                <div id="ui-diary" class="flex-1 hide"><textarea id="diary-box" class="w-full h-full p-8 rounded-3xl border shadow-inner focus:outline-none"></textarea></div>
                 <div id="ui-tasks" class="flex-1 hide overflow-y-auto"><div id="task-items"></div><button onclick="addTaskRow()" class="w-full p-4 mt-4 border-2 border-dashed rounded-xl">+ Task</button></div>
                 <div id="ui-sketch" class="flex-1 hide bg-white rounded-3xl border-4 overflow-hidden"><canvas id="paint-canvas"></canvas></div>
-                <div id="ui-secret" class="flex-1 hide flex flex-col gap-4"><textarea id="secret-plain" class="flex-1 p-4 rounded-xl border" oninput="updateSecret()"></textarea><textarea id="secret-encoded" class="flex-1 p-4 rounded-xl border bg-gray-50" readonly></textarea></div>
+                <div id="ui-secret" class="flex-1 hide flex flex-col gap-4"><textarea id="secret-plain" class="flex-1 p-4 rounded-xl border focus:outline-none" oninput="updateSecret()"></textarea><textarea id="secret-encoded" class="flex-1 p-4 rounded-xl border bg-gray-50 focus:outline-none" readonly></textarea></div>
                 <div id="ui-flashcards" class="flex-1 hide flex flex-col items-center"><div class="bubble p-20 text-3xl font-bold w-full max-w-lg text-center" id="card-q"></div></div>
             </div>
 
@@ -248,7 +238,7 @@ class MainWindow(QMainWindow):
                     files.forEach(f => {
                         const card = document.createElement('div');
                         card.className = "bubble p-4 text-center cursor-none";
-                        card.innerHTML = `<div class="font-bold">${f.name.split('.')[0]}</div>`;
+                        card.innerHTML = `<div class="font-bold text-bark">${f.name.split('.')[0]}</div><div class="text-xs text-bark/40">${f.type}</div>`;
                         card.onclick = () => openFile(f);
                         grid.appendChild(card);
                     });
@@ -278,8 +268,11 @@ class MainWindow(QMainWindow):
         """
         self.main_view.setHtml(self.html_content)
 
+    def handle_url_change(self, url):
+        self.url_display.setText(url.toString())
+
     def show_explorer(self, url):
-        self.url_input.setText(url)
+        self.url_display.setText(url)
         self.explorer_view.setUrl(QUrl(url))
         self.explorer_container.setGeometry(self.rect())
         self.explorer_container.show()
@@ -291,7 +284,6 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Safety check to ensure container is initialized
         if hasattr(self, 'explorer_container') and self.explorer_container.isVisible():
             self.explorer_container.setGeometry(self.rect())
 

@@ -60,7 +60,7 @@ class Bridge(QObject):
                         content = json.load(file)
                     else:
                         content = file.read()
-                files.append({"name": f.name, "content": content, "type": ftype})
+                files.append({"id": str(f.name), "name": f.name, "content": content, "type": ftype})
             except: continue
         self.loadFiles.emit(json.dumps(files))
 
@@ -131,7 +131,6 @@ class MainWindow(QMainWindow):
                     height: 100vh; overflow: hidden; margin: 0;
                 }
                 
-                /* Leaf Cursor */
                 #custom-cursor {
                     position: fixed;
                     width: 32px;
@@ -143,15 +142,10 @@ class MainWindow(QMainWindow):
                     filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.1));
                 }
                 
-                #custom-cursor.clicking {
-                    transform: translate(-50%, -50%) rotate(10deg) scale(0.8);
-                }
+                #custom-cursor.clicking { transform: translate(-50%, -50%) rotate(10deg) scale(0.8); }
 
-                input, textarea, [contenteditable="true"] {
-                    cursor: text !important;
-                }
+                input, textarea, [contenteditable="true"] { cursor: text !important; }
 
-                /* Dynamic Lighting Themes */
                 body.theme-sunrise { background-color: #FFECB3; } 
                 body.theme-day { background-color: #E3F2FD; }     
                 body.theme-sunset { background-color: #FFCCBC; }  
@@ -164,6 +158,7 @@ class MainWindow(QMainWindow):
                     border-radius: 2rem;
                     box-shadow: 0 10px 0 rgba(0,0,0,0.05);
                     border: 4px solid white;
+                    position: relative;
                 }
 
                 .leaf-card {
@@ -209,7 +204,6 @@ class MainWindow(QMainWindow):
 
                 .hide { display: none !important; }
 
-                /* Flashcard Flip */
                 .flip-card { perspective: 1000px; width: 100%; height: 300px; }
                 .flip-card-inner {
                     position: relative; width: 100%; height: 100%;
@@ -225,10 +219,27 @@ class MainWindow(QMainWindow):
                 }
                 .flip-front { background: white; color: var(--bark); }
                 .flip-back { background: var(--grass); color: white; transform: rotateY(180deg); }
+
+                /* Browser Styles */
+                #browser-frame {
+                    flex: 1;
+                    width: 100%;
+                    border: 8px solid var(--leaf-light);
+                    border-radius: 2rem;
+                    background: white;
+                }
+                .fav-icon {
+                    width: 64px; height: 64px;
+                    border-radius: 1rem;
+                    background: white;
+                    display: flex; items-center; justify-content: center;
+                    box-shadow: 0 4px 0 #ddd;
+                    transition: all 0.2s;
+                }
+                .fav-icon:hover { transform: scale(1.1); box-shadow: 0 6px 0 #ccc; }
             </style>
         </head>
         <body class="flex flex-col theme-day">
-            <!-- Leaf Cursor -->
             <div id="custom-cursor">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M2.00002 21.9998L3.99991 19.9999M2.00002 21.9998C12.5 21.9998 18.5 16 19.5 9.49983C20.5 2.99983 14.5 1.99983 14.5 1.99983C14.5 1.99983 14 8.49983 7 10.4998C2.5 11.7855 2.00002 16.4998 2.00002 21.9998Z" 
@@ -265,7 +276,7 @@ class MainWindow(QMainWindow):
                         <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
                             <i data-lucide="sparkles" class="text-yellow-500"></i> New Activity
                         </h2>
-                        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
                             <div class="leaf-card p-6 flex flex-col items-center gap-3 bg-white" onclick="newFile('diary')">
                                 <i data-lucide="feather" class="text-pink-400"></i><span class="font-bold text-sm">Note</span>
                             </div>
@@ -280,6 +291,9 @@ class MainWindow(QMainWindow):
                             </div>
                             <div class="leaf-card p-6 flex flex-col items-center gap-3 bg-white" onclick="newFile('flashcards')">
                                 <i data-lucide="layers" class="text-purple-500"></i><span class="font-bold text-sm">Cards</span>
+                            </div>
+                            <div class="leaf-card p-6 flex flex-col items-center gap-3 bg-white" onclick="openExplorer()">
+                                <i data-lucide="globe" class="text-sky-500"></i><span class="font-bold text-sm">Explorer</span>
                             </div>
                         </div>
                     </section>
@@ -309,58 +323,36 @@ class MainWindow(QMainWindow):
                         <input id="file-title" class="text-2xl font-bold bg-transparent border-none p-0" placeholder="Untitled...">
                         <span id="save-status" class="text-xs text-grass font-bold opacity-0 transition-opacity">Autosaved</span>
                     </div>
+                    <button id="discard-btn" onclick="discardCurrent()" class="nav-pill !bg-red-400 !shadow-[#C62828] mr-2">Discard</button>
                     <button id="save-btn" onclick="triggerSave()" class="nav-pill">Save & Close</button>
                 </div>
 
+                <!-- Editor Views -->
                 <div id="ui-diary" class="flex-1 hide"><textarea id="diary-box" class="w-full h-full text-lg leading-relaxed shadow-inner" placeholder="Once upon a time..."></textarea></div>
-                
-                <div id="ui-tasks" class="flex-1 hide space-y-4 overflow-y-auto">
-                    <div id="task-items" class="space-y-3"></div>
-                    <button onclick="addTaskRow()" class="w-full py-4 border-2 border-dashed border-leaf-light rounded-2xl text-leaf-light hover:text-grass font-bold">+ New Task</button>
-                </div>
+                <div id="ui-tasks" class="flex-1 hide space-y-4 overflow-y-auto"><div id="task-items" class="space-y-3"></div><button onclick="addTaskRow()" class="w-full py-4 border-2 border-dashed border-leaf-light rounded-2xl text-leaf-light hover:text-grass font-bold">+ New Task</button></div>
+                <div id="ui-sketch" class="flex-1 hide bg-white rounded-3xl border-4 border-leaf-light overflow-hidden relative shadow-lg"><canvas id="paint-canvas"></canvas><div class="absolute top-4 right-4"><button onclick="ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='white'; ctx.fillRect(0,0,canvas.width,canvas.height);" class="p-2 bg-white rounded-lg shadow hover:bg-red-50"><i data-lucide="eraser" class="w-5 h-5 text-red-400"></i></button></div></div>
+                <div id="ui-secret" class="flex-1 hide flex flex-col gap-6"><div class="bubble p-8 space-y-4"><label class="font-bold opacity-60">Normal Message:</label><textarea id="secret-plain" class="w-full h-32" oninput="updateSecret()"></textarea></div><div class="bubble p-8 space-y-4 bg-bark/5 border-bark/10"><label class="font-bold text-amber-800">Secret Code:</label><textarea id="secret-encoded" class="w-full h-32 text-amber-800 font-mono" oninput="updatePlain()"></textarea></div></div>
+                <div id="ui-flashcards" class="flex-1 hide flex flex-col gap-8"><div class="flex-1 flex flex-col items-center justify-center gap-8"><div id="card-display" class="flip-card" onclick="this.classList.toggle('flipped')"><div class="flip-card-inner"><div class="flip-front" id="card-q">Click + to add a card!</div><div class="flip-back" id="card-a">Answer will show here.</div></div></div><div class="flex gap-4"><button onclick="prevCard()" class="nav-pill !bg-bark !shadow-[#4E342E]">Back</button><span id="card-counter" class="font-bold text-2xl px-4 flex items-center">0 / 0</span><button onclick="nextCard()" class="nav-pill !bg-bark !shadow-[#4E342E]">Next</button></div></div><div class="bubble p-6 h-48 overflow-y-auto"><div id="flash-editor-list" class="space-y-2"></div><button onclick="addFlashRow()" class="mt-4 text-grass font-bold">+ Add New Card</button></div></div>
 
-                <div id="ui-sketch" class="flex-1 hide bg-white rounded-3xl border-4 border-leaf-light overflow-hidden relative shadow-lg">
-                    <canvas id="paint-canvas"></canvas>
-                    <div class="absolute top-4 right-4 flex gap-2">
-                        <button onclick="ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='white'; ctx.fillRect(0,0,canvas.width,canvas.height);" class="p-2 bg-white rounded-lg shadow hover:bg-red-50"><i data-lucide="eraser" class="w-5 h-5 text-red-400"></i></button>
+                <!-- Explorer Tool -->
+                <div id="ui-explorer" class="flex-1 hide flex flex-col gap-4">
+                    <div class="flex gap-4 items-center overflow-x-auto pb-2">
+                        <button onclick="goSafe('https://scratch.mit.edu')" class="fav-icon flex-shrink-0" title="Scratch"><img src="https://scratch.mit.edu/favicon.ico" class="w-8"></button>
+                        <button onclick="goSafe('https://www.kiddle.co')" class="fav-icon flex-shrink-0" title="Kiddle"><img src="https://www.kiddle.co/favicon.ico" class="w-8"></button>
+                        <button onclick="goSafe('https://www.classlink.com')" class="fav-icon flex-shrink-0" title="Classlink"><img src="https://www.classlink.com/favicon.ico" class="w-8"></button>
+                        <button onclick="goSafe('https://clever.com')" class="fav-icon flex-shrink-0" title="Clever"><img src="https://clever.com/favicon.ico" class="w-8"></button>
+                        <button onclick="goSafe('https://pbskids.org')" class="fav-icon flex-shrink-0" title="PBS Kids"><img src="https://pbskids.org/favicon.ico" class="w-8"></button>
+                        <div class="flex-1"></div>
+                        <input id="url-bar" type="text" placeholder="Go to safe site..." class="!p-2 text-sm w-96" onkeydown="if(event.key==='Enter') goSafe(this.value)">
                     </div>
-                </div>
-
-                <div id="ui-secret" class="flex-1 hide flex flex-col gap-6">
-                    <div class="bubble p-8 space-y-4">
-                        <label class="font-bold opacity-60">Normal Message:</label>
-                        <textarea id="secret-plain" class="w-full h-32" oninput="updateSecret()"></textarea>
-                    </div>
-                    <div class="bubble p-8 space-y-4 bg-bark/5 border-bark/10">
-                        <label class="font-bold text-amber-800">Secret Code:</label>
-                        <textarea id="secret-encoded" class="w-full h-32 text-amber-800 font-mono" oninput="updatePlain()"></textarea>
-                    </div>
-                </div>
-
-                <div id="ui-flashcards" class="flex-1 hide flex flex-col gap-8">
-                    <div class="flex-1 flex flex-col items-center justify-center gap-8">
-                        <div id="card-display" class="flip-card" onclick="this.classList.toggle('flipped')">
-                            <div class="flip-card-inner">
-                                <div class="flip-front" id="card-q">Click + to add a card!</div>
-                                <div class="flip-back" id="card-a">Answer will show here.</div>
-                            </div>
-                        </div>
-                        <div class="flex gap-4">
-                            <button onclick="prevCard()" class="nav-pill !bg-bark !shadow-[#4E342E]">Back</button>
-                            <span id="card-counter" class="font-bold text-2xl px-4 flex items-center">0 / 0</span>
-                            <button onclick="nextCard()" class="nav-pill !bg-bark !shadow-[#4E342E]">Next</button>
-                        </div>
-                    </div>
-                    <div class="bubble p-6 h-48 overflow-y-auto">
-                         <div id="flash-editor-list" class="space-y-2"></div>
-                         <button onclick="addFlashRow()" class="mt-4 text-grass font-bold">+ Add New Card</button>
-                    </div>
+                    <iframe id="browser-frame" src="about:blank"></iframe>
                 </div>
             </div>
 
             <script>
                 let pybridge;
                 let activeType = null;
+                let currentFileName = null;
                 let allFiles = [];
                 const canvas = document.getElementById('paint-canvas');
                 const ctx = canvas.getContext('2d');
@@ -368,11 +360,9 @@ class MainWindow(QMainWindow):
 
                 const cursor = document.getElementById('custom-cursor');
 
-                // Cursor Logic
                 document.addEventListener('mousemove', (e) => {
                     cursor.style.left = e.clientX + 'px';
                     cursor.style.top = e.clientY + 'px';
-                    
                     const target = e.target;
                     const isTextInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
                     cursor.style.opacity = isTextInput ? '0' : '1';
@@ -380,10 +370,7 @@ class MainWindow(QMainWindow):
 
                 document.addEventListener('mousedown', () => cursor.classList.add('clicking'));
                 document.addEventListener('mouseup', () => cursor.classList.remove('clicking'));
-                document.addEventListener('mouseleave', () => cursor.style.opacity = '0');
-                document.addEventListener('mouseenter', () => cursor.style.opacity = '1');
 
-                // Bridge Logic
                 new QWebChannel(qt.webChannelTransport, function(channel) {
                     pybridge = channel.objects.pybridge;
                     pybridge.loginSuccess.connect((user) => {
@@ -422,26 +409,49 @@ class MainWindow(QMainWindow):
                     grid.innerHTML = '';
                     files.forEach(f => {
                         const card = document.createElement('div');
-                        card.className = `bubble p-4 flex flex-col items-center text-center cursor-none hover:scale-105 transition-transform`;
+                        card.className = `bubble p-4 flex flex-col items-center text-center group`;
                         const icons = { diary:'feather', tasks:'list-checks', sketch:'palette', secret:'lock', flashcards:'layers' };
-                        card.innerHTML = `<div class="p-3 bg-gray-50 rounded-2xl mb-2"><i data-lucide="${icons[f.type]}" class="w-6 h-6 text-bark/60"></i></div><span class="text-sm font-bold truncate w-full px-2">${f.name.split('.')[0]}</span>`;
+                        card.innerHTML = `
+                            <button onclick="event.stopPropagation(); deleteConfirm('${f.name}')" class="absolute top-2 right-2 p-2 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                            <div class="p-3 bg-gray-50 rounded-2xl mb-2"><i data-lucide="${icons[f.type]}" class="w-6 h-6 text-bark/60"></i></div>
+                            <span class="text-sm font-bold truncate w-full px-2">${f.name.split('.')[0]}</span>
+                        `;
                         card.onclick = () => openFile(f);
-                        card.oncontextmenu = (e) => { e.preventDefault(); if(confirm("Discard this?")) pybridge.deleteFile(f.name); };
                         grid.appendChild(card);
                     });
                     lucide.createIcons();
                 }
 
+                function deleteConfirm(name) {
+                    if(confirm(`Do you want to discard "${name.split('.')[0]}" forever?`)) {
+                        pybridge.deleteFile(name);
+                    }
+                }
+
+                function discardCurrent() {
+                    if(currentFileName) {
+                        deleteConfirm(currentFileName);
+                        closeApp();
+                    } else {
+                        closeApp();
+                    }
+                }
+
                 function openFile(file) {
                     activeType = file.type;
+                    currentFileName = file.name;
                     document.getElementById('app-overlay').classList.add('active');
                     document.getElementById('file-title').value = file.name.split('.')[0];
-                    ['ui-diary', 'ui-tasks', 'ui-sketch', 'ui-secret', 'ui-flashcards'].forEach(id => document.getElementById(id).classList.add('hide'));
+                    document.getElementById('discard-btn').classList.toggle('hide', !currentFileName || currentFileName === 'Untitled');
+                    
+                    ['ui-diary', 'ui-tasks', 'ui-sketch', 'ui-secret', 'ui-flashcards', 'ui-explorer'].forEach(id => document.getElementById(id).classList.add('hide'));
                     document.getElementById('ui-' + file.type).classList.remove('hide');
+                    document.getElementById('save-btn').classList.remove('hide');
+                    document.getElementById('file-title').disabled = false;
 
-                    if(file.type === 'diary') {
-                        document.getElementById('diary-box').value = file.content;
-                    } 
+                    if(file.type === 'diary') document.getElementById('diary-box').value = file.content;
                     else if(file.type === 'tasks') {
                         document.getElementById('task-items').innerHTML = '';
                         file.content.forEach(t => addTaskRow(t.text, t.done));
@@ -453,8 +463,7 @@ class MainWindow(QMainWindow):
                             img.onload = () => ctx.drawImage(img, 0, 0); 
                             img.src = file.content.image; 
                         } else { 
-                            ctx.fillStyle = "white"; 
-                            ctx.fillRect(0,0,canvas.width,canvas.height); 
+                            ctx.fillStyle = "white"; ctx.fillRect(0,0,canvas.width,canvas.height); 
                         }
                     }
                     else if(file.type === 'secret') {
@@ -469,25 +478,41 @@ class MainWindow(QMainWindow):
                     }
                 }
 
+                function openExplorer() {
+                    activeType = 'explorer';
+                    currentFileName = null;
+                    document.getElementById('app-overlay').classList.add('active');
+                    document.getElementById('file-title').value = "Explorer";
+                    document.getElementById('file-title').disabled = true;
+                    ['ui-diary', 'ui-tasks', 'ui-sketch', 'ui-secret', 'ui-flashcards'].forEach(id => document.getElementById(id).classList.add('hide'));
+                    document.getElementById('ui-explorer').classList.remove('hide');
+                    document.getElementById('save-btn').classList.add('hide');
+                    document.getElementById('discard-btn').classList.add('hide');
+                    goSafe('https://www.kiddle.co');
+                    lucide.createIcons();
+                }
+
+                function goSafe(url) {
+                    if (!url.startsWith('http')) url = 'https://' + url;
+                    document.getElementById('browser-frame').src = url;
+                    document.getElementById('url-bar').value = url;
+                }
+
                 function triggerSave(silent = false) {
+                    if (activeType === 'explorer') return closeApp();
                     const title = document.getElementById('file-title').value || "Untitled";
                     let content = "";
-                    if(activeType === 'diary') {
-                        content = document.getElementById('diary-box').value;
-                    } else if(activeType === 'tasks') {
+                    if(activeType === 'diary') content = document.getElementById('diary-box').value;
+                    else if(activeType === 'tasks') {
                         const data = Array.from(document.querySelectorAll('#task-items > div')).map(d => ({ 
                             text: d.querySelector('input[type="text"]').value, 
                             done: d.querySelector('input[type="checkbox"]').checked 
                         }));
                         content = JSON.stringify(data);
-                    } else if(activeType === 'sketch') {
-                        content = JSON.stringify({image: canvas.toDataURL()});
-                    } else if(activeType === 'secret') {
-                        content = JSON.stringify({plain: document.getElementById('secret-plain').value});
-                    } else if(activeType === 'flashcards') {
-                        saveFlashData();
-                        content = JSON.stringify(currentCards);
-                    }
+                    } else if(activeType === 'sketch') content = JSON.stringify({image: canvas.toDataURL()});
+                    else if(activeType === 'secret') content = JSON.stringify({plain: document.getElementById('secret-plain').value});
+                    else if(activeType === 'flashcards') { saveFlashData(); content = JSON.stringify(currentCards); }
+                    
                     pybridge.saveFile(title, content, activeType);
                     if (silent) {
                         const status = document.getElementById('save-status');
@@ -572,7 +597,7 @@ class MainWindow(QMainWindow):
                 canvas.onmousemove = (e) => { if(drawing) { ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke(); } };
                 window.onmouseup = () => drawing = false;
 
-                function closeApp() { document.getElementById('app-overlay').classList.remove('active'); }
+                function closeApp() { document.getElementById('app-overlay').classList.remove('active'); document.getElementById('browser-frame').src = 'about:blank'; }
                 
                 setInterval(updateDynamicLighting, 3600000);
                 lucide.createIcons();

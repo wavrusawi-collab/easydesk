@@ -99,16 +99,13 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        # 1. Setup Window properties
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.showFullScreen()
         
-        # 2. Setup the Bridge and Channel
         self.bridge = Bridge(self)
         self.channel = QWebChannel()
         self.channel.registerObject('pybridge', self.bridge)
 
-        # 3. Create Explorer UI
         self.explorer_container = QWidget(self)
         self.explorer_container.hide()
         self.explorer_layout = QVBoxLayout(self.explorer_container)
@@ -119,10 +116,9 @@ class MainWindow(QMainWindow):
         back_btn.setStyleSheet("background: #88B04B; color: white; border-radius: 15px; padding: 10px 20px; font-weight: bold; border: none;")
         back_btn.clicked.connect(self.hide_explorer)
         
-        # Internal URL tracking (hidden address bar)
         self.url_display = QLineEdit()
         self.url_display.setReadOnly(True)
-        self.url_display.hide() # Completely hidden per request "remove the address bar"
+        self.url_display.hide()
         
         toolbar.addWidget(back_btn)
         toolbar.addStretch()
@@ -130,16 +126,13 @@ class MainWindow(QMainWindow):
 
         self.explorer_view = QWebEngineView()
         self.explorer_view.setStyleSheet("border-radius: 20px; background: white;")
-        # Handle page changes automatically
         self.explorer_view.urlChanged.connect(self.handle_url_change)
         self.explorer_layout.addWidget(self.explorer_view)
 
-        # 4. Setup Main UI View
         self.main_view = QWebEngineView()
         self.main_view.page().setWebChannel(self.channel)
         self.setCentralWidget(self.main_view)
 
-        # 5. Connect signals
         self.bridge.openBrowser.connect(self.show_explorer)
 
         self.html_content = """
@@ -151,41 +144,127 @@ class MainWindow(QMainWindow):
             <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
             <style>
                 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&family=Gaegu:wght@400;700&display=swap');
-                :root { --grass: #88B04B; --bark: #6D4C41; --leaf-light: #C5E1A5; --sky: #E3F2FD; }
+                :root { --grass: #88B04B; --bark: #6D4C41; --leaf-light: #C5E1A5; }
+                
                 * { cursor: none !important; }
-                body { transition: background-color 2s ease; background-color: var(--sky); font-family: 'Nunito', sans-serif; height: 100vh; overflow: hidden; margin: 0; }
-                #custom-cursor { position: fixed; width: 32px; height: 32px; pointer-events: none; z-index: 99999; transform: translate(-50%, -50%) rotate(-15deg); transition: transform 0.1s ease-out; filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.1)); }
-                input, textarea { cursor: text !important; }
-                .bubble { background: white; border-radius: 2rem; box-shadow: 0 10px 0 rgba(0,0,0,0.05); border: 4px solid white; position: relative; }
-                .leaf-card { background: white; border-radius: 1.5rem 4rem; transition: all 0.3s ease; cursor: none; border: 3px solid transparent; }
+                
+                body { 
+                    transition: background-color 5s ease; 
+                    font-family: 'Nunito', sans-serif; 
+                    height: 100vh; 
+                    overflow: hidden; 
+                    margin: 0; 
+                    position: relative;
+                }
+                
+                .theme-day { background-color: #E3F2FD; }
+                .theme-sunset { background-color: #FFCCBC; }
+                .theme-night { background-color: #263238; color: white; }
+
+                /* Scenery Styles */
+                .scenery-layer {
+                    position: fixed;
+                    bottom: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    pointer-events: none;
+                    z-index: 0;
+                }
+
+                .tree {
+                    position: absolute;
+                    bottom: 0;
+                    width: 60px;
+                    height: 100px;
+                    background: var(--bark);
+                    border-radius: 10px 10px 0 0;
+                }
+                .tree::after {
+                    content: '';
+                    position: absolute;
+                    top: -60px;
+                    left: -40px;
+                    width: 140px;
+                    height: 100px;
+                    background: var(--grass);
+                    border-radius: 50% 50% 50% 50%;
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                }
+
+                .cloud {
+                    position: absolute;
+                    background: white;
+                    border-radius: 50px;
+                    opacity: 0.8;
+                    animation: float linear infinite;
+                    box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+                }
+                .cloud::after, .cloud::before {
+                    content: '';
+                    position: absolute;
+                    background: inherit;
+                    border-radius: 50%;
+                }
+
+                @keyframes float {
+                    from { transform: translateX(-200px); }
+                    to { transform: translateX(100vw); }
+                }
+
+                #custom-cursor { 
+                    position: fixed; 
+                    width: 32px; 
+                    height: 32px; 
+                    pointer-events: none; 
+                    z-index: 99999; 
+                    transform: translate(-50%, -50%) rotate(-15deg); 
+                    transition: transform 0.1s ease-out; 
+                    filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.1)); 
+                }
+
+                .bubble { background: white; border-radius: 2rem; box-shadow: 0 10px 0 rgba(0,0,0,0.05); border: 4px solid white; position: relative; color: var(--bark); }
+                .theme-night .bubble { background: #37474F; border-color: #455A64; color: white; }
+
+                .leaf-card { background: white; border-radius: 1.5rem 4rem; transition: all 0.3s ease; cursor: none; border: 3px solid transparent; color: var(--bark); }
+                .theme-night .leaf-card { background: #37474F; color: white; }
                 .leaf-card:hover { transform: translateY(-5px); border-color: var(--grass); }
+
                 .overlay { position: fixed; inset: 0; z-index: 5000; display: none; padding: 2rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+                .theme-night .overlay { background: rgba(38, 50, 56, 0.95); }
                 .overlay.active { display: flex; flex-direction: column; }
+                
                 .nav-pill { background: var(--grass); color: white; padding: 0.75rem 2rem; border-radius: 999px; font-weight: 700; box-shadow: 0 4px 0 #558B2F; }
                 .hide { display: none !important; }
             </style>
         </head>
         <body class="flex flex-col theme-day">
+            <!-- Background Scenery -->
+            <div class="scenery-layer" id="scenery">
+                <div id="clouds-container"></div>
+                <div id="forest-container"></div>
+            </div>
+
             <div id="custom-cursor"><svg viewBox="0 0 24 24" fill="#88B04B"><path d="M2.00002 21.9998L3.99991 19.9999C12.5 21.9998 18.5 16 19.5 9.49983C20.5 2.99983 14.5 1.99983 14.5 1.99983C14.5 1.99983 14 8.49983 7 10.4998C2.5 11.7855 2.00002 16.4998 2.00002 21.9998Z"/></svg></div>
             
-            <div id="login" class="fixed inset-0 z-[9999] bg-[#E3F2FD] flex items-center justify-center p-10">
+            <div id="login" class="fixed inset-0 z-[9999] flex items-center justify-center p-10">
                 <div class="bubble p-12 text-center w-full max-w-sm space-y-6">
-                    <h1 class="text-3xl font-bold text-bark">Nature Desk</h1>
+                    <h1 class="text-3xl font-bold">Nature Desk</h1>
                     <input id="u" type="text" placeholder="Your Name" class="w-full text-center p-3 rounded-xl border">
-                    <input id="p" type="password" placeholder="Passkey" class="w-full text-center p-3 rounded-xl border">
+                    <input id="p" type="password" placeholder="Passkey" class="w-full text-center p-3 rounded-xl border text-bark">
                     <button onclick="login()" class="nav-pill w-full">Enter the Grove</button>
                 </div>
             </div>
 
-            <div id="dashboard" class="hide h-full flex flex-col p-8">
+            <div id="dashboard" class="hide h-full flex flex-col p-8 relative z-10">
                 <header class="flex justify-between items-center mb-12">
-                    <h1 class="text-4xl font-bold text-bark" id="welcome-text">Hello!</h1>
+                    <h1 class="text-4xl font-bold" id="welcome-text">Hello!</h1>
                     <button onclick="location.reload()" class="opacity-40 font-bold">Sign Out</button>
                 </header>
 
                 <div class="flex-1 overflow-y-auto space-y-12">
                     <section>
-                        <h2 class="text-xl font-bold mb-6 text-bark/60 uppercase tracking-widest text-sm">Create New</h2>
+                        <h2 class="text-xl font-bold mb-6 opacity-60 uppercase tracking-widest text-sm">Create New</h2>
                         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                             <div class="leaf-card p-6 flex flex-col items-center gap-3" onclick="newFile('diary')"><i data-lucide="feather"></i><span>Note</span></div>
                             <div class="leaf-card p-6 flex flex-col items-center gap-3" onclick="newFile('tasks')"><i data-lucide="list-checks"></i><span>Tasks</span></div>
@@ -197,7 +276,7 @@ class MainWindow(QMainWindow):
                     </section>
 
                     <section>
-                        <h2 class="text-xl font-bold mb-6 text-bark/60 uppercase tracking-widest text-sm">Collection</h2>
+                        <h2 class="text-xl font-bold mb-6 opacity-60 uppercase tracking-widest text-sm">Collection</h2>
                         <div id="file-grid" class="grid grid-cols-2 md:grid-cols-5 gap-4"></div>
                     </section>
                 </div>
@@ -205,15 +284,15 @@ class MainWindow(QMainWindow):
 
             <div id="app-overlay" class="overlay">
                 <div class="flex items-center gap-4 mb-8">
-                    <button onclick="closeApp()" class="w-12 h-12 rounded-full bg-white flex items-center justify-center">←</button>
-                    <input id="file-title" class="text-2xl font-bold bg-transparent border-none flex-1 focus:outline-none text-bark">
+                    <button onclick="closeApp()" class="w-12 h-12 rounded-full bg-white text-bark flex items-center justify-center shadow">←</button>
+                    <input id="file-title" class="text-2xl font-bold bg-transparent border-none flex-1 focus:outline-none">
                     <button onclick="discardCurrent()" class="nav-pill !bg-red-400">Discard</button>
                     <button onclick="triggerSave()" class="nav-pill">Save & Close</button>
                 </div>
-                <div id="ui-diary" class="flex-1 hide"><textarea id="diary-box" class="w-full h-full p-8 rounded-3xl border shadow-inner focus:outline-none"></textarea></div>
-                <div id="ui-tasks" class="flex-1 hide overflow-y-auto"><div id="task-items"></div><button onclick="addTaskRow()" class="w-full p-4 mt-4 border-2 border-dashed rounded-xl">+ Task</button></div>
+                <div id="ui-diary" class="flex-1 hide"><textarea id="diary-box" class="w-full h-full p-8 rounded-3xl border shadow-inner focus:outline-none text-bark"></textarea></div>
+                <div id="ui-tasks" class="flex-1 hide overflow-y-auto text-bark"><div id="task-items"></div><button onclick="addTaskRow()" class="w-full p-4 mt-4 border-2 border-dashed rounded-xl">+ Task</button></div>
                 <div id="ui-sketch" class="flex-1 hide bg-white rounded-3xl border-4 overflow-hidden"><canvas id="paint-canvas"></canvas></div>
-                <div id="ui-secret" class="flex-1 hide flex flex-col gap-4"><textarea id="secret-plain" class="flex-1 p-4 rounded-xl border focus:outline-none" oninput="updateSecret()"></textarea><textarea id="secret-encoded" class="flex-1 p-4 rounded-xl border bg-gray-50 focus:outline-none" readonly></textarea></div>
+                <div id="ui-secret" class="flex-1 hide flex flex-col gap-4 text-bark"><textarea id="secret-plain" class="flex-1 p-4 rounded-xl border focus:outline-none" oninput="updateSecret()"></textarea><textarea id="secret-encoded" class="flex-1 p-4 rounded-xl border bg-gray-50 focus:outline-none" readonly></textarea></div>
                 <div id="ui-flashcards" class="flex-1 hide flex flex-col items-center"><div class="bubble p-20 text-3xl font-bold w-full max-w-lg text-center" id="card-q"></div></div>
             </div>
 
@@ -221,6 +300,44 @@ class MainWindow(QMainWindow):
                 let pybridge;
                 let activeType = null;
                 let currentFileName = null;
+
+                // Dynamic Lighting Cycle
+                const themes = ['day', 'sunset', 'night'];
+                let currentThemeIdx = 0;
+                setInterval(() => {
+                    currentThemeIdx = (currentThemeIdx + 1) % themes.length;
+                    document.body.className = 'flex flex-col theme-' + themes[currentThemeIdx];
+                }, 30000);
+
+                // Scenery Generation
+                function createScenery() {
+                    const forest = document.getElementById('forest-container');
+                    const clouds = document.getElementById('clouds-container');
+                    
+                    // Add Trees
+                    for(let i=0; i<8; i++) {
+                        const t = document.createElement('div');
+                        t.className = 'tree';
+                        t.style.left = (i * 15 + Math.random() * 5) + 'vw';
+                        t.style.opacity = 0.3 + Math.random() * 0.5;
+                        t.style.transform = `scale(${0.5 + Math.random()})`;
+                        forest.appendChild(t);
+                    }
+
+                    // Add Clouds
+                    for(let i=0; i<5; i++) {
+                        const c = document.createElement('div');
+                        c.className = 'cloud';
+                        c.style.width = (100 + Math.random() * 100) + 'px';
+                        c.style.height = '40px';
+                        c.style.top = (10 + Math.random() * 30) + 'vh';
+                        c.style.animationDuration = (30 + Math.random() * 60) + 's';
+                        c.style.animationDelay = -(Math.random() * 60) + 's';
+                        clouds.appendChild(c);
+                    }
+                }
+                createScenery();
+
                 new QWebChannel(qt.webChannelTransport, function(channel) {
                     pybridge = channel.objects.pybridge;
                     pybridge.loginSuccess.connect(user => {
@@ -238,7 +355,7 @@ class MainWindow(QMainWindow):
                     files.forEach(f => {
                         const card = document.createElement('div');
                         card.className = "bubble p-4 text-center cursor-none";
-                        card.innerHTML = `<div class="font-bold text-bark">${f.name.split('.')[0]}</div><div class="text-xs text-bark/40">${f.type}</div>`;
+                        card.innerHTML = `<div class="font-bold">${f.name.split('.')[0]}</div><div class="text-xs opacity-40">${f.type}</div>`;
                         card.onclick = () => openFile(f);
                         grid.appendChild(card);
                     });
